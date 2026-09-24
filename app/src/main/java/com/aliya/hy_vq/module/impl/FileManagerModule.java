@@ -4275,8 +4275,24 @@ public class FileManagerModule extends HyVqModule {
     }
 
     private void openFile(File f) {
-        // 统一走「打开方式」弹窗：默认页为内置打开方式，左下角可切换到系统打开方式
-        showOpenWithDialog(f.getAbsolutePath(), f.getName(), false);
+        final String ext = extOf(f.getName());
+        final String path = f.getAbsolutePath();
+        final String name = f.getName();
+        // 格式明确且内置功能存在 → 直接调用内置功能，不弹窗打扰
+        if (IMAGE_EXTS.contains(ext)) {
+            openImageViewer(path, name, false);
+            return;
+        }
+        if (MEDIA_EXTS.contains(ext)) {
+            openWithBuiltInPlayer(path, name, false);
+            return;
+        }
+        if (isTextFile(name)) {
+            openTextEditor(f);
+            return;
+        }
+        // 其余（APK / 压缩包 / 未知类型）：内置行为带副作用或不确定 → 弹「打开方式」由用户选择
+        showOpenWithDialog(path, name, false);
     }
 
     // ==================== 打开方式弹窗 ====================
@@ -4619,7 +4635,16 @@ public class FileManagerModule extends HyVqModule {
             if (mime == null || mime.isEmpty()) {
                 mime = mimeOf(extOf(e.name));
             }
-            // SAF 文件同样走「打开方式」弹窗
+            // 格式明确且内置功能支持 → 直接调用（SAF 文本编辑暂不支持，故文本走弹窗）
+            String safExt = extOf(e.name);
+            if (IMAGE_EXTS.contains(safExt)) {
+                openImageViewer(e.path, e.name, true);
+                return;
+            }
+            if (MEDIA_EXTS.contains(safExt)) {
+                openWithBuiltInPlayer(e.path, e.name, true);
+                return;
+            }
             showOpenWithDialog(e.path, e.name, true);
         } catch (Throwable t) {
             ModuleUiKit.toast(ctx, "无法打开：" + t.getMessage());
