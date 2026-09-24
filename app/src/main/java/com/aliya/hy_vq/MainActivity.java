@@ -1518,6 +1518,10 @@ public class MainActivity extends AppCompatActivity {
             "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
     /** 启动时自动检查更新的偏好键（默认开启） */
     private static final String PREF_AUTO_CHECK_UPDATE = "auto_check_update";
+    /** 首选：GitHub API（实时，无 CDN 缓存；未鉴权 60 次/小时/IP，更新检查频率远低于此） */
+    private static final String REMOTE_MANIFEST_API =
+            "https://api.github.com/repos/" + GH_OWNER + "/" + GH_REPO + "/contents/latest.json";
+    /** 回退：raw 直链（⚠️ CDN 有 5 分钟缓存，发版后短时内可能读到旧清单） */
     private static final String REMOTE_MANIFEST =
             "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/main/latest.json";
 
@@ -1525,6 +1529,10 @@ public class MainActivity extends AppCompatActivity {
      *  某些 CDN 会 302 跳转，故手动跟随（最多 5 跳），不依赖 HttpURLConnection 自动跟随。
      *  返回的连接已带最终响应码，调用方负责读流与 disconnect()。 */
     private java.net.HttpURLConnection openRemote(String url, String method) throws Exception {
+        return openRemote(url, method, null);
+    }
+
+    private java.net.HttpURLConnection openRemote(String url, String method, String accept) throws Exception {
         String cur = url;
         for (int hop = 0; hop < 5; hop++) {
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(cur).openConnection();
@@ -1532,7 +1540,8 @@ public class MainActivity extends AppCompatActivity {
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(30000);
             conn.setInstanceFollowRedirects(false);
-            conn.setRequestProperty("Accept", "application/json, application/octet-stream, */*");
+            conn.setRequestProperty("Accept", accept != null ? accept
+                    : "application/json, application/octet-stream, */*");
             int code = conn.getResponseCode();
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                 String loc = conn.getHeaderField("Location");
@@ -1756,6 +1765,33 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "暂无可安装的更新，请先检查更新", Toast.LENGTH_SHORT).show();
     }
 
+    /** 拉取远程版本清单：优先 GitHub API（实时），失败回退 raw 直链（可能有 5 分钟 CDN 缓存） */
+    private org.json.JSONObject fetchRemoteManifest() {
+        try {
+            java.net.HttpURLConnection conn = openRemote(
+                    REMOTE_MANIFEST_API, "GET", "application/vnd.github.raw");
+            if (conn.getResponseCode() == 200) {
+                org.json.JSONObject j = new org.json.JSONObject(readAll(conn.getInputStream()));
+                conn.disconnect();
+                return j;
+            }
+            conn.disconnect();
+        } catch (Exception ignored) {
+            // 回退到 raw
+        }
+        try {
+            java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
+            if (conn.getResponseCode() == 200) {
+                org.json.JSONObject j = new org.json.JSONObject(readAll(conn.getInputStream()));
+                conn.disconnect();
+                return j;
+            }
+            conn.disconnect();
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** 启动时自动检查更新：受开关控制，静默进行，只在发现新版本时提示 */
     private void autoCheckUpdateOnLaunch() {
         if (prefs == null || !prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true)) return;
@@ -1766,17 +1802,7 @@ public class MainActivity extends AppCompatActivity {
     /** 后台静默检查：不显示「检查中」，发现新版本才提示 */
     private void silentCheckUpdate() {
         new Thread(() -> {
-            org.json.JSONObject json = null;
-            try {
-                java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
-                if (conn.getResponseCode() == 200) {
-                    json = new org.json.JSONObject(readAll(conn.getInputStream()));
-                }
-                conn.disconnect();
-            } catch (Exception ignored) {
-                // 静默检查失败不打扰用户
-            }
-            final org.json.JSONObject fj = json;
+            final org.json.JSONObject fj = fetchRemoteManifest();   // 失败静默，不打扰用户
             if (fj == null) return;
             runOnUiThread(() -> {
                 // 用户若已手动检查过（状态更"新"），不覆盖其结果
@@ -1879,24 +1905,8 @@ public class MainActivity extends AppCompatActivity {
         updError = "";
         renderUpdateView();
         new Thread(() -> {
-            org.json.JSONObject json = null;
-            String err = null;
-            try {
-                java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
-                int code = conn.getResponseCode();
-                if (code == 200) {
-                    json = new org.json.JSONObject(readAll(conn.getInputStream()));
-                } else if (code == 404) {
-                    err = "更新源未找到版本清单";
-                } else {
-                    err = "更新源响应异常 (HTTP " + code + ")";
-                }
-                conn.disconnect();
-            } catch (Exception e) {
-                err = "检查失败：" + e.getMessage();
-            }
-            final org.json.JSONObject fj = json;
-            final String ferr = err;
+            final org.json.JSONObject fj = fetchRemoteManifest();
+            final String ferr = (fj == null) ? "无法连接更新源，请检查网络后重试" : null;
             runOnUiThread(() -> {
                 if (fj != null) {
                     updRemote = fj;
