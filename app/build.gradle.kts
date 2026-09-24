@@ -14,8 +14,8 @@ android {
         // compileSdk/targetSdk 保持 33，暂不适配 Android 17 (API 37)
         minSdk = 28
         targetSdk = 33
-        versionCode = 22
-        versionName = "2.3.1"
+        versionCode = 23
+        versionName = "2.3.2"
         
         vectorDrawables { 
             useSupportLibrary = true

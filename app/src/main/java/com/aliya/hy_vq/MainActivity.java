@@ -2038,7 +2038,13 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                if (!ri.apkUrl.isEmpty()) out.add(ri);
+                if (!ri.apkUrl.isEmpty()) {
+                    // ⭐ 关键：国内源文件名规则固定，**无条件推断**国内直链，
+                    // 这样即使 GitHub 列表读取成功，下载时 GitHub 不可达也能自动回退国内源。
+                    // （若国内源并无该文件，回退尝试会失败并被忽略，不影响主流程）
+                    ri.apkCnUrl = CN_BASE + "HY_VQ-v" + ri.ver + ".apk";
+                    out.add(ri);
+                }
             }
         } catch (Exception ignored) {
         }
@@ -2214,7 +2220,9 @@ public class MainActivity extends AppCompatActivity {
         if (fs == null) return;
         for (File f : fs) {
             String n = f.getName();
-            boolean isPkg = (n.startsWith("hyvq_update_") && n.endsWith(".apk")) || n.endsWith(".apk.part");
+            // 覆盖新旧两种命名：新 hyvq_update_v<版本>.apk / 旧 hyvq_update.apk
+            boolean isPkg = (n.startsWith("hyvq_update") && n.endsWith(".apk"))
+                    || n.endsWith(".apk.part");
             if (isPkg && (keep == null || !f.getAbsolutePath().equals(keep.getAbsolutePath()))) {
                 //noinspection ResultOfMethodCallIgnored
                 f.delete();
@@ -2331,16 +2339,33 @@ public class MainActivity extends AppCompatActivity {
             String err = null;
             final File tmp = new File(target.getParentFile(), target.getName() + ".part");
             try {
-                java.net.HttpURLConnection conn = openRemote(apkUrl, "GET");
-                int code = conn.getResponseCode();
-                // GitHub 不可达时自动切国内备用源（123 云盘只读直链）
-                if (code != 200 && cnUrl != null && !cnUrl.isEmpty()) {
-                    conn.disconnect();
+                // ⭐ 主源尝试必须包在 try 里：GitHub 不可达时 openRemote 会**抛异常**
+                // （而非返回非 200），若不加保护将直接跳到外层 catch，**回退逻辑永远执行不到**。
+                java.net.HttpURLConnection conn = null;
+                int code = -1;
+                String mainErr = null;
+                try {
+                    conn = openRemote(apkUrl, "GET");
+                    code = conn.getResponseCode();
+                } catch (Exception e) {
+                    mainErr = e.getMessage();
+                }
+                // 主源失败（异常或非 200）→ 自动切国内备用源（123 云盘只读直链）
+                if ((conn == null || code != 200) && cnUrl != null && !cnUrl.isEmpty()) {
+                    if (conn != null) {
+                        try {
+                            conn.disconnect();
+                        } catch (Throwable ignored) {
+                        }
+                    }
                     runOnUiThread(() -> tvPct.setText("主源不可用，正在切换国内备用源…"));
                     conn = openRemote(cnUrl, "GET");
                     code = conn.getResponseCode();
                 }
-                if (code != 200) throw new Exception("HTTP " + code);
+                if (code != 200) {
+                    throw new Exception("HTTP " + code
+                            + (mainErr != null ? "（主源：" + mainErr + "）" : ""));
+                }
                 long total = expectSize > 0 ? expectSize : conn.getContentLength();
                 long done = 0;
                 int lastPct = -1;
