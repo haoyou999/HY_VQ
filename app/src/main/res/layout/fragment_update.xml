@@ -7,6 +7,7 @@
     android:padding="16dp">
 
     <LinearLayout
+        android:id="@+id/update_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
@@ -199,21 +200,22 @@
                 android:textAppearance="?attr/textAppearanceTitleSmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
-            <TextView
-                android:id="@+id/tv_history_toggle"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_history_toggle"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="2dp"
+                android:minWidth="0dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="10dp"
                 android:text="展开"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="?attr/colorOnSurfaceVariant" />
-
-            <ImageView
-                android:id="@+id/iv_history_arrow"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:src="@drawable/ic_chevron_right"
-                android:contentDescription="展开历史版本" />
+                android:textSize="12sp"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_expand_more"
+                app:iconGravity="textEnd"
+                app:iconPadding="2dp"
+                app:iconSize="18dp" />
         </LinearLayout>
 
         <LinearLayout

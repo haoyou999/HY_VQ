@@ -1635,13 +1635,15 @@ public class MainActivity extends AppCompatActivity {
         updateView.findViewById(R.id.btn_upd_install_cached).setOnClickListener(v -> {
             if (updCachedApk != null) installApk(updCachedApk);
         });
+        // 整行与按钮都能切换历史版本展开（按钮自带水波纹反馈）
+        View.OnClickListener toggleHistory = v -> {
+            historyExpanded = !historyExpanded;
+            renderReleaseList(true);      // true = 启用过渡动画
+        };
         View histHeader = updateView.findViewById(R.id.row_history_header);
-        if (histHeader != null) {
-            histHeader.setOnClickListener(v -> {
-                historyExpanded = !historyExpanded;
-                renderReleaseList();
-            });
-        }
+        if (histHeader != null) histHeader.setOnClickListener(toggleHistory);
+        View btnHistoryToggle = updateView.findViewById(R.id.btn_history_toggle);
+        if (btnHistoryToggle != null) btnHistoryToggle.setOnClickListener(toggleHistory);
         com.google.android.material.switchmaterial.SwitchMaterial swAuto =
                 updateView.findViewById(R.id.switch_upd_auto);
         TextView tvAutoDesc = updateView.findViewById(R.id.tv_upd_auto_desc);
@@ -1773,13 +1775,17 @@ public class MainActivity extends AppCompatActivity {
     /** 渲染「可用版本」列表：每行可点，下载直链取自 API 返回的精确地址 */
     /** 渲染版本区：最新版本 / 当前版本 / 历史版本（默认折叠，避免列表过长） */
     private void renderReleaseList() {
+        renderReleaseList(false);
+    }
+
+    private void renderReleaseList(boolean animate) {
         if (updateView == null) return;
         LinearLayout boxLatest = updateView.findViewById(R.id.box_latest_version);
         LinearLayout boxCurrent = updateView.findViewById(R.id.box_current_version);
         LinearLayout boxHistory = updateView.findViewById(R.id.box_history_list);
         View histHeader = updateView.findViewById(R.id.row_history_header);
-        TextView toggle = updateView.findViewById(R.id.tv_history_toggle);
-        ImageView arrow = updateView.findViewById(R.id.iv_history_arrow);
+        com.google.android.material.button.MaterialButton btnToggle =
+                updateView.findViewById(R.id.btn_history_toggle);
         if (boxLatest == null || boxCurrent == null || boxHistory == null) return;
 
         boxLatest.removeAllViews();
@@ -1833,12 +1839,23 @@ public class MainActivity extends AppCompatActivity {
         } else {
             if (histHeader != null) histHeader.setVisibility(View.VISIBLE);
             for (ReleaseInfo ri : history) boxHistory.addView(buildReleaseRow(ri, false));
-            boxHistory.setVisibility(historyExpanded ? View.VISIBLE : View.GONE);
-            if (toggle != null) {
-                toggle.setText(historyExpanded
-                        ? "收起（" + history.size() + "）" : "展开（" + history.size() + "）");
+
+            // 展开/收起时启用平滑过渡：必须在改变可见性**之前**启动，
+            // AutoTransition 会自动处理淡入淡出与高度变化（系统 API，无需额外依赖）
+            if (animate) {
+                ViewGroup scene = updateView.findViewById(R.id.update_content);
+                if (scene != null) {
+                    android.transition.TransitionManager.beginDelayedTransition(
+                            scene, new android.transition.AutoTransition().setDuration(240));
+                }
             }
-            if (arrow != null) arrow.setRotation(historyExpanded ? 90f : 0f);
+            boxHistory.setVisibility(historyExpanded ? View.VISIBLE : View.GONE);
+
+            if (btnToggle != null) {
+                btnToggle.setText(historyExpanded ? "收起" : "展开");
+                btnToggle.setIconResource(historyExpanded
+                        ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+            }
         }
     }
 
