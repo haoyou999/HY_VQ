@@ -1,9 +1,9 @@
 {
-  "versionCode": 19,
-  "versionName": "2.1.1",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.1.1/HY_VQ-v2.1.1.apk",
-  "size": 23477204,
-  "md5": "098de026e8bbec6c2ebbc333afd5037b",
+  "versionCode": 20,
+  "versionName": "2.2.0",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.2.0/HY_VQ-v2.2.0.apk",
+  "size": 23492583,
+  "md5": "843af6444142ecd86c4a7e310d665545",
   "force": false,
-  "changelog": "· 历史版本展开/收起加入平滑过渡动画（AutoTransition，240ms 淡入淡出 + 高度变化），不再是生硬闪现\n· 展开按钮重做为圆角药丸样式（TonalButton），带图标跟随状态切换（展开▼ / 收起▲）\n· 展开按钮与整行标题都可点击切换，按钮自带水波纹反馈\n· 过渡仅在切换瞬间启用，列表刷新时不会引起整页闪动"
+  "changelog": "· 新增**内置音视频播放器**（基于原生 VideoView/MediaPlayer，无需任何第三方依赖）\n· 文件管理点击音视频文件**直接调用内置播放器**，不再走系统外部应用（原 ACTION_VIEW 路径已改为仅处理非媒体文件）\n· 支持播放/暂停、拖动进度、当前位置与总时长显示、点击画面切换控制条显隐\n· 音频文件显示专属占位界面（音频图标 + 文件名），不再是黑屏\n· 兼容两种来源：本地文件路径 与 SAF(content://) 授权文件\n· 播放期间屏幕常亮；退出或切后台自动暂停，销毁时释放播放器\n· 媒体类型覆盖 20 种视频 + 20 种音频扩展名，与文件列表图标分类保持一致"
 }
