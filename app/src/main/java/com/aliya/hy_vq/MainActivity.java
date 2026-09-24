@@ -106,6 +106,9 @@ public class MainActivity extends AppCompatActivity {
     // 避免多个页面共用同一页码导致返回逻辑/动画方向判断混乱。
     private static final int PAGE_HOME = 0;
     private static final int PAGE_FILEMGR = 1;
+    private static final int PAGE_ABOUT = 2;
+    /** 开源仓库地址（与 README / LICENSE 一致） */
+    private static final String OPEN_SOURCE_URL = "https://github.com/haoyou999/HY_VQ";
     private static final int PAGE_SETTINGS = 3;
     private static final int PAGE_ACCOUNT = 4;
     private static final int PAGE_MODULE_SETTINGS = 6;
@@ -115,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private ActionBarDrawerToggle toggle;
 
-    private View homeView, settingsView, accountView, moduleSettingsView, permissionsView;
+    private View homeView, settingsView, accountView, moduleSettingsView, permissionsView, aboutView;
     private ViewGroup contentFrame;
     private SharedPreferences prefs;
     private SignatureManager signatureManager;
@@ -333,6 +336,101 @@ public class MainActivity extends AppCompatActivity {
         switchContent(moduleView, nextModulePageIndex++);
         resetToolbar();
         binding.toolbarTitle.setText(m.name);
+    }
+
+    // ==================== 关于页 ====================
+
+    private void switchToAbout() {
+        if (aboutView == null) {
+            aboutView = LayoutInflater.from(this).inflate(R.layout.fragment_about, contentFrame, false);
+            setupAboutView();
+        }
+        switchContent(aboutView, PAGE_ABOUT);
+        setSubpageToolbar("关于");
+    }
+
+    private void setupAboutView() {
+        if (aboutView == null) return;
+        int code = 0;
+        try {
+            code = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception ignored) {
+        }
+        TextView tvVer = aboutView.findViewById(R.id.tv_about_version);
+        if (tvVer != null) tvVer.setText("v" + baseVersionName() + " (code " + code + ")");
+        TextView tvRepo = aboutView.findViewById(R.id.tv_about_repo);
+        if (tvRepo != null) tvRepo.setText(OPEN_SOURCE_URL.replace("https://", ""));
+
+        TextView tvCredits = aboutView.findViewById(R.id.tv_about_credits);
+        if (tvCredits != null) {
+            tvCredits.setText(String.join(System.lineSeparator(), new String[]{
+                    "Material Files —— 目录滚动位置记忆的设计思路",
+                    "Terracotta —— 局域网 P2P 直连运行库",
+                    "Material Components for Android —— Material 3 组件",
+                    "AndroidX —— 基础支持库"
+            }));
+        }
+        TextView tvCr = aboutView.findViewById(R.id.tv_about_copyright);
+        if (tvCr != null) {
+            tvCr.setText(String.join(System.lineSeparator(), new String[]{
+                    "© 2026 HY_VQ",
+                    "以 GNU GPL v3.0 协议开源",
+                    "可自由使用、修改与再分发，衍生作品须采用同一协议"
+            }));
+        }
+        aboutView.findViewById(R.id.item_about_repo).setOnClickListener(v -> openUrl(OPEN_SOURCE_URL));
+        aboutView.findViewById(R.id.item_about_license).setOnClickListener(v -> showLicenseDialog());
+        aboutView.findViewById(R.id.item_about_changelog).setOnClickListener(v -> showUpdateDialog());
+    }
+
+    /** 用系统浏览器打开链接 */
+    private void openUrl(String url) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开链接：" + url, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 开源许可证说明（GPL-3.0 要点 + 跳转全文） */
+    private void showLicenseDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "📜 开源许可证"));
+        TextView tv = new TextView(this);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tv.setLineSpacing(0, 1.45f);
+        tv.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        int pad = dp2(4);
+        tv.setPadding(pad, pad, pad, pad);
+        tv.setText(String.join(System.lineSeparator(), new String[]{
+                "GNU General Public License v3.0",
+                "",
+                "你可以自由地：",
+                "· 将本软件用于任何目的",
+                "· 研究并修改源代码",
+                "· 再分发副本",
+                "",
+                "但必须遵守：",
+                "· 公开发布修改后的源码",
+                "· 衍生作品同样采用 GPL-3.0",
+                "· 保留版权与许可声明",
+                "· 作者不提供任何担保"
+        }));
+        box.addView(tv);
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        android.app.Dialog d = ModuleUiKit.glassDialog(this, box);
+        btns.addView(updateTextButton("查看全文", v -> {
+            d.dismiss();
+            openUrl(OPEN_SOURCE_URL + "/blob/main/LICENSE");
+        }));
+        btns.addView(updateTextButton("知道了", v -> d.dismiss()));
+        box.addView(btns);
+        d.show();
     }
 
     /** 打开文件管理：内置一级功能（非模块） */
@@ -761,6 +859,7 @@ public class MainActivity extends AppCompatActivity {
         homeView = null;
         settingsView = null;
         accountView = null;
+        aboutView = null;
         moduleSettingsView = null;
         permissionsView = null;
         hideHintRunnable = null;
@@ -838,6 +937,10 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (accountView != null && accountView.getParent() != null) {
+            switchToSettings();
+            return true;
+        }
+        if (aboutView != null && aboutView.getParent() != null) {
             switchToSettings();
             return true;
         }
@@ -1297,6 +1400,10 @@ public class MainActivity extends AppCompatActivity {
 
         settingsView.findViewById(R.id.item_account).setOnClickListener(v -> switchToAccount());
         settingsView.findViewById(R.id.item_general).setOnClickListener(v -> showDefaultPageDialog());
+        View itemAbout = settingsView.findViewById(R.id.item_about);
+        if (itemAbout != null) itemAbout.setOnClickListener(v -> switchToAbout());
+        TextView tvAboutLabel = settingsView.findViewById(R.id.tv_about_label);
+        if (tvAboutLabel != null) tvAboutLabel.setText("v" + baseVersionName());
         settingsView.findViewById(R.id.item_storage).setOnClickListener(v ->
                 Toast.makeText(this, "存储管理开发中", Toast.LENGTH_SHORT).show());
         // 模块设置入口
