@@ -51,6 +51,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- 内置图片查看器：图片类文件优先由本页打开 -->
+        <activity
+            android:name=".ImageViewerActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:launchMode="singleTop" />
+
         <!-- 内置音视频播放器：文件管理点击音视频直接调用，不走系统外部应用 -->
         <activity
             android:name=".MediaPlayerActivity"

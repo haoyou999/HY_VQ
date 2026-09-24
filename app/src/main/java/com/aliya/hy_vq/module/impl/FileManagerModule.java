@@ -4236,6 +4236,12 @@ public class FileManagerModule extends HyVqModule {
     }
 
 
+    /** 图片扩展名：命中时内置「图片查看器」可用 */
+    private static final java.util.Set<String> IMAGE_EXTS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg",
+                    "ico", "tif", "tiff", "raw", "cr2", "nef", "arw", "dng", "psd", "ai"));
+
     /** 音视频扩展名：命中则直接调用**内置播放器**，不再走系统外部应用 */
     private static final java.util.Set<String> MEDIA_EXTS =
             new java.util.HashSet<>(java.util.Arrays.asList(
@@ -4269,25 +4275,329 @@ public class FileManagerModule extends HyVqModule {
     }
 
     private void openFile(File f) {
-        try {
-            String ext = "";
-            int dot = f.getName().lastIndexOf('.');
-            if (dot >= 0) ext = f.getName().substring(dot + 1).toLowerCase();
-            // 音视频 → 内置播放器（不经系统外部应用）
-            if (MEDIA_EXTS.contains(ext)) {
-                openWithBuiltInPlayer(f.getAbsolutePath(), f.getName(), false);
-                return;
+        // 统一走「打开方式」弹窗：默认页为内置打开方式，左下角可切换到系统打开方式
+        showOpenWithDialog(f.getAbsolutePath(), f.getName(), false);
+    }
+
+    // ==================== 打开方式弹窗 ====================
+
+    /** 打开方式弹窗：默认展示**内置**打开方式；左下角可切换到**系统**打开方式。
+     *  系统页列出系统已注册的应用（点击直接由该应用打开），**不拉起系统选择器**。 */
+    private void showOpenWithDialog(final String pathOrUri, final String name, final boolean isUri) {
+        final String ext = extOf(name);
+        final boolean isImg = IMAGE_EXTS.contains(ext);
+        final boolean isMedia = MEDIA_EXTS.contains(ext);
+        final boolean isText = isTextFile(name);
+        final boolean isZipFile = "zip".equals(ext) || "jar".equals(ext);
+        final boolean isApk = "apk".equals(ext);
+
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "打开方式"));
+
+        TextView tvName = new TextView(ctx);
+        tvName.setText(name);
+        tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tvName.setMaxLines(2);
+        tvName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        tvName.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        int p4 = dp(4);
+        tvName.setPadding(p4, 0, p4, dp(8));
+        box.addView(tvName);
+
+        final TextView tvPage = new TextView(ctx);
+        tvPage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tvPage.setTypeface(null, android.graphics.Typeface.BOLD);
+        tvPage.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary));
+        tvPage.setPadding(p4, 0, p4, dp(6));
+        box.addView(tvPage);
+
+        final LinearLayout listBox = new LinearLayout(ctx);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        android.widget.ScrollView sc = new android.widget.ScrollView(ctx);
+        sc.addView(listBox, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        box.addView(sc, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(230)));
+
+        LinearLayout btns = new LinearLayout(ctx);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView btnSwitch = new TextView(ctx);
+        btnSwitch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btnSwitch.setTypeface(null, android.graphics.Typeface.BOLD);
+        btnSwitch.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary));
+        btnSwitch.setPadding(p4, dp(10), p4, dp(10));
+        TextView btnCancel = new TextView(ctx);
+        btnCancel.setText("取消");
+        btnCancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btnCancel.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        btnCancel.setPadding(dp(12), dp(10), p4, dp(10));
+        btns.addView(btnSwitch, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        btns.addView(btnCancel);
+        box.addView(btns);
+
+        final android.app.Dialog d = ModuleUiKit.glassDialog(ctx, box);
+        final boolean[] sysMode = {false};
+
+        final Runnable render = () -> {
+            listBox.removeAllViews();
+            tvPage.setText(sysMode[0] ? "系统打开方式" : "内置打开方式");
+            btnSwitch.setText(sysMode[0] ? "内置打开方式" : "系统打开方式");
+            if (!sysMode[0]) {
+                addOpenRow(listBox, d, R.drawable.ic_img, "内置图片查看器",
+                        "双指缩放 · 拖动 · 双击还原", isImg,
+                        () -> openImageViewer(pathOrUri, name, isUri));
+                addOpenRow(listBox, d, R.drawable.ic_video, "内置播放器",
+                        "视频与音频 · 进度控制", isMedia,
+                        () -> openWithBuiltInPlayer(pathOrUri, name, isUri));
+                addOpenRow(listBox, d, R.drawable.ic_doc, "内置文本编辑器",
+                        "查看与编辑文本、代码", isText,
+                        () -> openInEditorByName(pathOrUri, name, isUri));
+                addOpenRow(listBox, d, R.drawable.ic_archive, "解压到当前目录",
+                        "ZIP 压缩包", isZipFile,
+                        () -> unzipByName(pathOrUri, name, isUri));
+                addOpenRow(listBox, d, R.drawable.ic_apk, "安装应用",
+                        "Android 安装包", isApk,
+                        () -> installApkByName(pathOrUri, name, isUri));
+            } else {
+                renderSystemOpeners(listBox, d, pathOrUri, name, isUri);
             }
-            String mime = mimeOf(ext);
-            Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", f);
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, mime == null ? "*/*" : mime);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            ctx.startActivity(intent);
-        } catch (Throwable t) {
-            ModuleUiKit.toast(ctx, "无法打开：" + t.getMessage());
+        };
+
+        btnSwitch.setOnClickListener(v -> {
+            sysMode[0] = !sysMode[0];
+            render.run();
+        });
+        btnCancel.setOnClickListener(v -> d.dismiss());
+        render.run();
+        d.show();
+    }
+
+    /** 内置打开方式条目：可用则高亮可点，不适用则灰显并标注 */
+    private void addOpenRow(LinearLayout parent, final android.app.Dialog dialog,
+                            int iconRes, String title, String desc, boolean enabled,
+                            final Runnable action) {
+        int onSurface = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface);
+        int variant = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant);
+        int primary = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary);
+
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), dp(10), dp(10), dp(10));
+        if (enabled) {
+            row.setBackground(ModuleUiKit.rounded(ctx, 12,
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorSurfaceContainerLow),
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorOutlineVariant)));
+        }
+
+        ImageView ic = new ImageView(ctx);
+        ic.setImageResource(iconRes);
+        int isz = dp(24);
+        ic.setLayoutParams(new LinearLayout.LayoutParams(isz, isz));
+        ic.setColorFilter(enabled ? primary : variant);
+        ic.setAlpha(enabled ? 1f : 0.3f);
+        row.addView(ic);
+
+        LinearLayout col = new LinearLayout(ctx);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(12), 0, 0, 0);
+        TextView t1 = new TextView(ctx);
+        t1.setText(title);
+        t1.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        t1.setTextColor(enabled ? onSurface : variant);
+        t1.setAlpha(enabled ? 1f : 0.45f);
+        TextView t2 = new TextView(ctx);
+        t2.setText(enabled ? desc : desc + " · 不适用于此文件");
+        t2.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        t2.setTextColor(variant);
+        t2.setAlpha(enabled ? 1f : 0.45f);
+        col.addView(t1);
+        col.addView(t2);
+        row.addView(col, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(6);
+        parent.addView(row, lp);
+
+        if (enabled) {
+            row.setOnClickListener(v -> {
+                dialog.dismiss();
+                action.run();
+            });
         }
     }
+
+    /** 系统打开方式：列出系统已注册应用，点击直接由该应用打开（不弹系统选择器） */
+    private void renderSystemOpeners(LinearLayout parent, final android.app.Dialog dialog,
+                                     final String pathOrUri, final String name, final boolean isUri) {
+        int onSurface = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface);
+        int variant = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant);
+        try {
+            final Uri uri = isUri ? Uri.parse(pathOrUri)
+                    : FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider",
+                    new File(pathOrUri));
+            final String mime = mimeOf(extOf(name));
+            Intent probe = new Intent(Intent.ACTION_VIEW);
+            probe.setDataAndType(uri, mime == null ? "*/*" : mime);
+            java.util.List<android.content.pm.ResolveInfo> apps =
+                    ctx.getPackageManager().queryIntentActivities(probe, 0);
+            if (apps.isEmpty()) {
+                parent.addView(hintText("系统未找到可打开该文件的应用", variant));
+                return;
+            }
+            for (final android.content.pm.ResolveInfo ri : apps) {
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                row.setPadding(dp(10), dp(10), dp(10), dp(10));
+                row.setBackground(ModuleUiKit.rounded(ctx, 12,
+                        ModuleUiKit.color(ctx,
+                                com.google.android.material.R.attr.colorSurfaceContainerLow),
+                        ModuleUiKit.color(ctx,
+                                com.google.android.material.R.attr.colorOutlineVariant)));
+
+                ImageView ic = new ImageView(ctx);
+                int isz = dp(26);
+                ic.setLayoutParams(new LinearLayout.LayoutParams(isz, isz));
+                try {
+                    ic.setImageDrawable(ri.loadIcon(ctx.getPackageManager()));
+                } catch (Throwable ignored) {
+                }
+                row.addView(ic);
+
+                LinearLayout col = new LinearLayout(ctx);
+                col.setOrientation(LinearLayout.VERTICAL);
+                col.setPadding(dp(12), 0, 0, 0);
+                TextView t1 = new TextView(ctx);
+                String label = "";
+                try {
+                    label = ri.loadLabel(ctx.getPackageManager()).toString();
+                } catch (Throwable ignored) {
+                }
+                t1.setText(label);
+                t1.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+                t1.setTextColor(onSurface);
+                TextView t2 = new TextView(ctx);
+                t2.setText(ri.activityInfo.packageName);
+                t2.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+                t2.setTextColor(variant);
+                col.addView(t1);
+                col.addView(t2);
+                row.addView(col, new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
+                lp.bottomMargin = dp(6);
+                parent.addView(row, lp);
+
+                row.setOnClickListener(v -> {
+                    dialog.dismiss();
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW);
+                        i.setComponent(new android.content.ComponentName(
+                                ri.activityInfo.packageName, ri.activityInfo.name));
+                        i.setDataAndType(uri, mime == null ? "*/*" : mime);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        ctx.startActivity(i);
+                    } catch (Throwable t) {
+                        ModuleUiKit.toast(ctx, "打开失败：" + t.getMessage());
+                    }
+                });
+            }
+        } catch (Throwable t) {
+            parent.addView(hintText("读取系统应用失败：" + t.getMessage(), variant));
+        }
+    }
+
+    private TextView hintText(String text, int color) {
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tv.setTextColor(color);
+        tv.setPadding(dp(4), dp(10), dp(4), dp(10));
+        return tv;
+    }
+
+    /** 内置图片查看器 */
+    private void openImageViewer(String pathOrUri, String name, boolean isUri) {
+        try {
+            Intent i = new Intent(ctx, com.aliya.hy_vq.ImageViewerActivity.class);
+            if (isUri) {
+                i.putExtra(com.aliya.hy_vq.ImageViewerActivity.EXTRA_URI, pathOrUri);
+            } else {
+                i.putExtra(com.aliya.hy_vq.ImageViewerActivity.EXTRA_PATH, pathOrUri);
+            }
+            i.putExtra(com.aliya.hy_vq.ImageViewerActivity.EXTRA_TITLE, name);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            ctx.startActivity(i);
+        } catch (Throwable t) {
+            ModuleUiKit.toast(ctx, "无法打开图片查看器：" + t.getMessage());
+        }
+    }
+
+    /** 用内置编辑器打开指定文件（先进入其所在目录再打开） */
+    private void openInEditorByName(String pathOrUri, String name, boolean isUri) {
+        try {
+            File f = isUri ? null : new File(pathOrUri);
+            if (f == null || !f.exists()) {
+                ModuleUiKit.toast(ctx, "SAF 文件暂不支持内置编辑器，请改用系统打开方式");
+                return;
+            }
+            openTextEditor(f);
+        } catch (Throwable t) {
+            ModuleUiKit.toast(ctx, "无法打开编辑器：" + t.getMessage());
+        }
+    }
+
+    /** 解压指定压缩包（复用既有解压流程） */
+    private void unzipByName(String pathOrUri, String name, boolean isUri) {
+        try {
+            File f = isUri ? null : new File(pathOrUri);
+            if (f == null || !f.exists()) {
+                ModuleUiKit.toast(ctx, "SAF 文件暂不支持直接解压，请先复制到本地");
+                return;
+            }
+            extractZip(FileEntry.file(f.getAbsolutePath(), f.length(), f.lastModified()));
+        } catch (Throwable t) {
+            ModuleUiKit.toast(ctx, "解压失败：" + t.getMessage());
+        }
+    }
+
+    /** 安装 APK（复用系统安装器） */
+    private void installApkByName(String pathOrUri, String name, boolean isUri) {
+        try {
+            Uri uri = isUri ? Uri.parse(pathOrUri)
+                    : FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider",
+                    new File(pathOrUri));
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+        } catch (Throwable t) {
+            ModuleUiKit.toast(ctx, "无法安装：" + t.getMessage());
+        }
+    }
+
+
 
     /** 打开 SAF（content://）文件：uri + provider mime 直发系统（无需 FileProvider 中转） */
     private void openSafFile(FileEntry e) {
@@ -4309,15 +4619,8 @@ public class FileManagerModule extends HyVqModule {
             if (mime == null || mime.isEmpty()) {
                 mime = mimeOf(extOf(e.name));
             }
-            // 音视频 → 内置播放器（content:// 直接交给播放器消费）
-            if (MEDIA_EXTS.contains(extOf(e.name))) {
-                openWithBuiltInPlayer(e.path, e.name, true);
-                return;
-            }
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(uri, mime == null ? "*/*" : mime);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            ctx.startActivity(intent);
+            // SAF 文件同样走「打开方式」弹窗
+            showOpenWithDialog(e.path, e.name, true);
         } catch (Throwable t) {
             ModuleUiKit.toast(ctx, "无法打开：" + t.getMessage());
         }
