@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ═══════════════════════════════════════════════
+         主色调：紫罗兰渐变系
+         ═══════════════════════════════════════════════ -->
+    <color name="primary">#42A5F5</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="primary_container">#BBDEFB</color>
+    <color name="on_primary_container">#1B3A5C</color>
+
+    <!-- 次要色：青色系 -->
+    <color name="secondary">#64B5F6</color>
+    <color name="on_secondary">#FFFFFF</color>
+    <color name="secondary_container">#E0F7FA</color>
+    <color name="on_secondary_container">#1F4A5A</color>
+
+    <!-- 第三色：珊瑚粉 -->
+    <color name="tertiary">#90CAF9</color>
+    <color name="on_tertiary">#1B3A5C</color>
+    <color name="tertiary_container">#E0F7FA</color>
+    <color name="on_tertiary_container">#1F4A5A</color>
+
+    <!-- ═══════════════════════════════════════════════
+         表面色：暖象牙白基底
+         ═══════════════════════════════════════════════ -->
+    <color name="surface">#FAFCFF</color>
+    <color name="on_surface">#1A1C1E</color>
+    <color name="surface_variant">#DCE9F5</color>
+    <color name="on_surface_variant">#43525E</color>
+    <color name="surface_container">#F1F8FD</color>
+    <color name="surface_container_low">#F7FBFF</color>
+    <color name="surface_container_high">#E8F2FB</color>
+    <color name="surface_container_highest">#E0EDF8</color>
+
+    <!-- ═══════════════════════════════════════════════
+         磨砂玻璃专用色（核心新增）
+         ═══════════════════════════════════════════════ -->
+    <!-- 亮色主题磨砂：白底+高透明 -->
+    <color name="glass_light_100">#FFFEFCFC</color>       <!-- 100% 不透，侧边栏本体 -->
+    <color name="glass_light_90">#E6FEFCFC</color>       <!-- 90% 不透，用于主卡片 -->
+    <color name="glass_light_80">#CCFEFCFC</color>       <!-- 80% 不透，用于面板/侧栏 -->
+    <color name="glass_light_70">#B3FEFCFC</color>       <!-- 70% 不透，用于浮层 -->
+    <color name="glass_light_75">#BFFEFCFC</color>       <!-- 75% 不透，用于侧边栏 -->
+    <color name="glass_light_60">#99FEFCFC</color>       <!-- 60% 不透，用于弹窗背景 -->
+    <color name="glass_light_50">#80FEFCFC</color>       <!-- 50% 不透，用于工具栏 -->
+    <color name="glass_light_40">#66FEFCFC</color>       <!-- 40% 不透，用于底部栏 -->
+    <color name="glass_light_30">#4DFEFCFC</color>       <!-- 30% 不透，薄雾 -->
+
+    <!-- 暗色主题磨砂：深灰底+高透明 -->
+    <color name="glass_dark_90">#E61A1A1E</color>
+    <color name="glass_dark_80">#CC1A1A1E</color>
+    <color name="glass_dark_70">#B31A1A1E</color>
+    <color name="glass_dark_60">#991A1A1E</color>
+    <color name="glass_dark_50">#801A1A1E</color>
+    <color name="glass_dark_40">#661A1A1E</color>
+    <color name="glass_dark_30">#4D1A1A1E</color>
+
+    <!-- 紫色系磨砂叠加层 -->
+    <color name="glass_purple_15">#2642A5F5</color>      <!-- 15% 紫色蒙版，紫光效果 -->
+    <color name="glass_purple_10">#1A42A5F5</color>
+    <color name="glass_purple_05">#0D42A5F5</color>
+
+    <!-- 通用毛玻璃色（兼容旧引用） -->
+    <color name="glass_overlay">#CCFEFCFC</color>
+    <color name="glass_overlay_dark">#CC1A1A1E</color>
+
+    <!-- ═══════════════════════════════════════════════
+         渐变端点
+         ═══════════════════════════════════════════════ -->
+    <color name="gradient_start">#42A5F5</color>
+    <color name="gradient_mid">#64B5F6</color>
+    <color name="gradient_end">#90CAF9</color>
+    <!-- 柔和渐变 -->
+    <color name="gradient_soft_start">#E0F7FA</color>
+    <color name="gradient_soft_end">#E3F2FD</color>
+
+    <!-- ═══════════════════════════════════════════════
+         轮廓线 / 分割线
+         ═══════════════════════════════════════════════ -->
+    <color name="outline">#79747E</color>
+    <color name="outline_variant">#CAC4D0</color>
+    <color name="glass_border_light">#40FFFFFF</color>    <!-- 半透明白边，仿玻璃边缘高光 -->
+    <color name="glass_border_dark">#1A000000</color>    <!-- 半透明黑影边缘 -->
+    <color name="glass_panel_border">#8086868E</color>   <!-- 弹窗面板边框：50% 中性灰，模糊背景上依然清晰（明暗主题通用） -->
+
+    <!-- ═══════════════════════════════════════════════
+         背景 + 错误色
+         ═══════════════════════════════════════════════ -->
+    <color name="background">#FAFCFF</color>
+    <color name="on_background">#1A1C1E</color>
+    <color name="error">#B3261E</color>
+    <color name="on_error">#FFFFFF</color>
+    <color name="error_container">#F9DEDC</color>
+    <color name="on_error_container">#410E0B</color>
+
+    <!-- ═══════════════════════════════════════════════
+         功能卡片专用色（保留原风格）
+         ═══════════════════════════════════════════════ -->
+    <color name="card_discover_bg">#BBDEFB</color>
+    <color name="card_discover_icon">#42A5F5</color>
+    <color name="card_moments_bg">#E0F7FA</color>
+    <color name="card_moments_icon">#64B5F6</color>
+    <color name="card_personalize_bg">#E3F2FD</color>
+    <color name="card_personalize_icon">#90CAF9</color>
+    <color name="card_mine_card_bg">#DCE9F5</color>
+    <color name="card_mine_card_icon">#64B5F6</color>
+
+    <!-- 兼容旧引用 -->
+    <color name="colorPrimary">@color/primary</color>
+    <color name="colorPrimaryDark">@color/primary</color>
+    <color name="colorAccent">@color/secondary</color>
+
+    <!-- ═══════════════════════════════════════════════
+         多主题配色（仿 ZhuFiler ThemeOverlay 体系，2026-08-22 适配）
+         每套含 Material3 完整色系，供 ThemeOverlay 叠加使用
+         ═══════════════════════════════════════════════ -->
+
+    <!-- 蓝色主题 -->
+    <color name="theme_blue_primary">#42A5F5</color>
+    <color name="theme_blue_on_primary">#FFFFFF</color>
+    <color name="theme_blue_primary_container">#BBDEFB</color>
+    <color name="theme_blue_on_primary_container">#1B3A5C</color>
+    <color name="theme_blue_secondary">#64B5F6</color>
+    <color name="theme_blue_on_secondary">#FFFFFF</color>
+    <color name="theme_blue_secondary_container">#E0F7FA</color>
+    <color name="theme_blue_on_secondary_container">#1F4A5A</color>
+    <color name="theme_blue_tertiary">#90CAF9</color>
+    <color name="theme_blue_on_tertiary">#FFFFFF</color>
+    <color name="theme_blue_tertiary_container">#E0F7FA</color>
+    <color name="theme_blue_on_tertiary_container">#1F4A5A</color>
+    <color name="theme_blue_error">#BA1A1A</color>
+    <color name="theme_blue_on_error">#FFFFFF</color>
+    <color name="theme_blue_error_container">#FFDAD6</color>
+    <color name="theme_blue_on_error_container">#410002</color>
+    <color name="theme_blue_surface">#FAFCFF</color>
+    <color name="theme_blue_on_surface">#1A1C20</color>
+    <color name="theme_blue_surface_variant">#DCE9F5</color>
+    <color name="theme_blue_on_surface_variant">#44474E</color>
+    <color name="theme_blue_outline">#74777F</color>
+    <color name="theme_blue_outline_variant">#C4C6D0</color>
+    <color name="theme_blue_surface_container">#F1F8FD</color>
+    <color name="theme_blue_surface_container_low">#F7FBFF</color>
+    <color name="theme_blue_surface_container_high">#E8F2FB</color>
+    <color name="theme_blue_surface_container_highest">#E0EDF8</color>
+
+    <!-- 绿色主题 -->
+    <color name="theme_green_primary">#81C784</color>
+    <color name="theme_green_on_primary">#FFFFFF</color>
+    <color name="theme_green_primary_container">#E8F5E9</color>
+    <color name="theme_green_on_primary_container">#1B3B1E</color>
+    <color name="theme_green_secondary">#A5D6A7</color>
+    <color name="theme_green_on_secondary">#FFFFFF</color>
+    <color name="theme_green_secondary_container">#F1F8E9</color>
+    <color name="theme_green_on_secondary_container">#2A3D22</color>
+    <color name="theme_green_tertiary">#C8E6C9</color>
+    <color name="theme_green_on_tertiary">#1B3B1E</color>
+    <color name="theme_green_tertiary_container">#F1F8E9</color>
+    <color name="theme_green_on_tertiary_container">#1B3B1E</color>
+    <color name="theme_green_error">#EF9A9A</color>
+    <color name="theme_green_on_error">#FFFFFF</color>
+    <color name="theme_green_error_container">#FFEBEE</color>
+    <color name="theme_green_on_error_container">#5C1A1A</color>
+    <color name="theme_green_surface">#F9FDF9</color>
+    <color name="theme_green_on_surface">#1A1C1E</color>
+    <color name="theme_green_surface_variant">#DCE5DC</color>
+    <color name="theme_green_on_surface_variant">#424940</color>
+    <color name="theme_green_outline">#727971</color>
+    <color name="theme_green_outline_variant">#C2C9C1</color>
+    <color name="theme_green_surface_container">#F2F8F2</color>
+    <color name="theme_green_surface_container_low">#F8FCF8</color>
+    <color name="theme_green_surface_container_high">#ECF2EC</color>
+    <color name="theme_green_surface_container_highest">#E6EDE6</color>
+
+    <!-- 紫色主题 -->
+    <color name="theme_purple_primary">#B39DDB</color>
+    <color name="theme_purple_on_primary">#FFFFFF</color>
+    <color name="theme_purple_primary_container">#E1D5F7</color>
+    <color name="theme_purple_on_primary_container">#3A2A5C</color>
+    <color name="theme_purple_secondary">#CE93D8</color>
+    <color name="theme_purple_on_secondary">#FFFFFF</color>
+    <color name="theme_purple_secondary_container">#F3E5F5</color>
+    <color name="theme_purple_on_secondary_container">#4A2E4F</color>
+    <color name="theme_purple_tertiary">#D1C4E9</color>
+    <color name="theme_purple_on_tertiary">#3A2A5C</color>
+    <color name="theme_purple_tertiary_container">#EDE7F6</color>
+    <color name="theme_purple_on_tertiary_container">#3A2A5C</color>
+    <color name="theme_purple_error">#EF9A9A</color>
+    <color name="theme_purple_on_error">#FFFFFF</color>
+    <color name="theme_purple_error_container">#FFEBEE</color>
+    <color name="theme_purple_on_error_container">#5C1A1A</color>
+    <color name="theme_purple_surface">#FBF9FF</color>
+    <color name="theme_purple_on_surface">#1A1C1E</color>
+    <color name="theme_purple_surface_variant">#E7E0EC</color>
+    <color name="theme_purple_on_surface_variant">#4A454E</color>
+    <color name="theme_purple_outline">#7A757F</color>
+    <color name="theme_purple_outline_variant">#CBC4CF</color>
+    <color name="theme_purple_surface_container">#F5F1FA</color>
+    <color name="theme_purple_surface_container_low">#FAF7FE</color>
+    <color name="theme_purple_surface_container_high">#EFEAF6</color>
+    <color name="theme_purple_surface_container_highest">#E9E3F1</color>
+
+    <!-- ══ 梦幻粉 ══ -->
+    <color name="theme_pink_primary">#F48FB1</color>
+    <color name="theme_pink_on_primary">#FFFFFF</color>
+    <color name="theme_pink_primary_container">#FCE4EC</color>
+    <color name="theme_pink_on_primary_container">#5C1F33</color>
+    <color name="theme_pink_secondary">#F8BBD0</color>
+    <color name="theme_pink_on_secondary">#FFFFFF</color>
+    <color name="theme_pink_secondary_container">#FFF0F5</color>
+    <color name="theme_pink_on_secondary_container">#5C2E3E</color>
+    <color name="theme_pink_tertiary">#FFCDD2</color>
+    <color name="theme_pink_on_tertiary">#5C1F2A</color>
+    <color name="theme_pink_tertiary_container">#FFF0F2</color>
+    <color name="theme_pink_on_tertiary_container">#5C1F2A</color>
+    <color name="theme_pink_error">#EF9A9A</color>
+    <color name="theme_pink_on_error">#FFFFFF</color>
+    <color name="theme_pink_error_container">#FFEBEE</color>
+    <color name="theme_pink_on_error_container">#5C1A1A</color>
+    <color name="theme_pink_surface">#FFFBFE</color>
+    <color name="theme_pink_on_surface">#1A1C1E</color>
+    <color name="theme_pink_surface_variant">#F0DEE5</color>
+    <color name="theme_pink_on_surface_variant">#52434A</color>
+    <color name="theme_pink_outline">#85737A</color>
+    <color name="theme_pink_outline_variant">#D7C1CA</color>
+    <color name="theme_pink_surface_container">#FEF5F9</color>
+    <color name="theme_pink_surface_container_low">#FFF9FC</color>
+    <color name="theme_pink_surface_container_high">#F9EFF4</color>
+    <color name="theme_pink_surface_container_highest">#F3E9EE</color>
+
+    <!-- 橙色主题 -->
+    <color name="theme_orange_primary">#FFB74D</color>
+    <color name="theme_orange_on_primary">#FFFFFF</color>
+    <color name="theme_orange_primary_container">#FFF3E0</color>
+    <color name="theme_orange_on_primary_container">#4A2800</color>
+    <color name="theme_orange_secondary">#FFCC80</color>
+    <color name="theme_orange_on_secondary">#FFFFFF</color>
+    <color name="theme_orange_secondary_container">#FFF8E1</color>
+    <color name="theme_orange_on_secondary_container">#4A3510</color>
+    <color name="theme_orange_tertiary">#FFE0B2</color>
+    <color name="theme_orange_on_tertiary">#4A2800</color>
+    <color name="theme_orange_tertiary_container">#FFF8E1</color>
+    <color name="theme_orange_on_tertiary_container">#4A2800</color>
+    <color name="theme_orange_error">#EF9A9A</color>
+    <color name="theme_orange_on_error">#FFFFFF</color>
+    <color name="theme_orange_error_container">#FFEBEE</color>
+    <color name="theme_orange_on_error_container">#5C1A1A</color>
+    <color name="theme_orange_surface">#FFFCF7</color>
+    <color name="theme_orange_on_surface">#1A1C1E</color>
+    <color name="theme_orange_surface_variant">#EBE0D0</color>
+    <color name="theme_orange_on_surface_variant">#4E4536</color>
+    <color name="theme_orange_outline">#7F7566</color>
+    <color name="theme_orange_outline_variant">#D1C6B6</color>
+    <color name="theme_orange_surface_container">#FDF6EC</color>
+    <color name="theme_orange_surface_container_low">#FFFBF6</color>
+    <color name="theme_orange_surface_container_high">#F7F0E6</color>
+    <color name="theme_orange_surface_container_highest">#F1EAE0</color>
+
+    <!-- 红色主题 -->
+    <color name="theme_red_primary">#EF9A9A</color>
+    <color name="theme_red_on_primary">#FFFFFF</color>
+    <color name="theme_red_primary_container">#FFEBEE</color>
+    <color name="theme_red_on_primary_container">#5C1A1A</color>
+    <color name="theme_red_secondary">#F48FB1</color>
+    <color name="theme_red_on_secondary">#FFFFFF</color>
+    <color name="theme_red_secondary_container">#FCE4EC</color>
+    <color name="theme_red_on_secondary_container">#5C2434</color>
+    <color name="theme_red_tertiary">#FFCDD2</color>
+    <color name="theme_red_on_tertiary">#5C1A1A</color>
+    <color name="theme_red_tertiary_container">#FFF0F2</color>
+    <color name="theme_red_on_tertiary_container">#5C1A1A</color>
+    <color name="theme_red_error">#EF9A9A</color>
+    <color name="theme_red_on_error">#FFFFFF</color>
+    <color name="theme_red_error_container">#FFEBEE</color>
+    <color name="theme_red_on_error_container">#5C1A1A</color>
+    <color name="theme_red_surface">#FFF8F8</color>
+    <color name="theme_red_on_surface">#1A1C1E</color>
+    <color name="theme_red_surface_variant">#EFDDDD</color>
+    <color name="theme_red_on_surface_variant">#524344</color>
+    <color name="theme_red_outline">#857373</color>
+    <color name="theme_red_outline_variant">#D7C1C1</color>
+    <color name="theme_red_surface_container">#FEF2F2</color>
+    <color name="theme_red_surface_container_low">#FFF8F8</color>
+    <color name="theme_red_surface_container_high">#F8ECEC</color>
+    <color name="theme_red_surface_container_highest">#F2E6E6</color>
+
+    <!-- 黄色主题 -->
+    <color name="theme_yellow_primary">#FFF176</color>
+    <color name="theme_yellow_on_primary">#3F3200</color>
+    <color name="theme_yellow_primary_container">#FFFDE7</color>
+    <color name="theme_yellow_on_primary_container">#3F3200</color>
+    <color name="theme_yellow_secondary">#FFF59D</color>
+    <color name="theme_yellow_on_secondary">#3F3200</color>
+    <color name="theme_yellow_secondary_container">#FFFDE7</color>
+    <color name="theme_yellow_on_secondary_container">#3F3200</color>
+    <color name="theme_yellow_tertiary">#FFF9C4</color>
+    <color name="theme_yellow_on_tertiary">#3F3200</color>
+    <color name="theme_yellow_tertiary_container">#FFFDE7</color>
+    <color name="theme_yellow_on_tertiary_container">#3F3200</color>
+    <color name="theme_yellow_error">#EF9A9A</color>
+    <color name="theme_yellow_on_error">#FFFFFF</color>
+    <color name="theme_yellow_error_container">#FFEBEE</color>
+    <color name="theme_yellow_on_error_container">#5C1A1A</color>
+    <color name="theme_yellow_surface">#FFFFFB</color>
+    <color name="theme_yellow_on_surface">#1A1C1E</color>
+    <color name="theme_yellow_surface_variant">#E8E4CE</color>
+    <color name="theme_yellow_on_surface_variant">#4A4735</color>
+    <color name="theme_yellow_outline">#7A7763</color>
+    <color name="theme_yellow_outline_variant">#CCC9B3</color>
+    <color name="theme_yellow_surface_container">#FDFCEE</color>
+    <color name="theme_yellow_surface_container_low">#FFFEF7</color>
+    <color name="theme_yellow_surface_container_high">#F7F6E8</color>
+    <color name="theme_yellow_surface_container_highest">#F1F0E2</color>
+
+    <!-- 青色主题 -->
+    <color name="theme_cyan_primary">#80DEEA</color>
+    <color name="theme_cyan_on_primary">#FFFFFF</color>
+    <color name="theme_cyan_primary_container">#E0F7FA</color>
+    <color name="theme_cyan_on_primary_container">#00363D</color>
+    <color name="theme_cyan_secondary">#4DB6AC</color>
+    <color name="theme_cyan_on_secondary">#FFFFFF</color>
+    <color name="theme_cyan_secondary_container">#E0F2F1</color>
+    <color name="theme_cyan_on_secondary_container">#00382F</color>
+    <color name="theme_cyan_tertiary">#B2EBF2</color>
+    <color name="theme_cyan_on_tertiary">#00363D</color>
+    <color name="theme_cyan_tertiary_container">#E0F7FA</color>
+    <color name="theme_cyan_on_tertiary_container">#00363D</color>
+    <color name="theme_cyan_error">#EF9A9A</color>
+    <color name="theme_cyan_on_error">#FFFFFF</color>
+    <color name="theme_cyan_error_container">#FFEBEE</color>
+    <color name="theme_cyan_on_error_container">#5C1A1A</color>
+    <color name="theme_cyan_surface">#F7FDFE</color>
+    <color name="theme_cyan_on_surface">#1A1C1E</color>
+    <color name="theme_cyan_surface_variant">#D8E4E6</color>
+    <color name="theme_cyan_on_surface_variant">#3F484A</color>
+    <color name="theme_cyan_outline">#6F797B</color>
+    <color name="theme_cyan_outline_variant">#BFC8CA</color>
+    <color name="theme_cyan_surface_container">#F0F8F9</color>
+    <color name="theme_cyan_surface_container_low">#F6FCFD</color>
+    <color name="theme_cyan_surface_container_high">#EAF2F3</color>
+    <color name="theme_cyan_surface_container_highest">#E4ECEE</color>
+</resources>

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="@drawable/bg_glass_dialog">
+
+    <!-- 标题行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="18dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="?attr/colorTertiaryContainer">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_chat"
+                android:contentDescription="添加"
+                android:padding="10dp"
+                android:tint="?attr/colorTertiary" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="添加好友"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="输入好友名称或 UID"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_debug_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="调试"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:textColor="#CCFFB300"
+            android:background="@drawable/bg_unread_badge"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp" />
+    </LinearLayout>
+
+    <!-- 分隔线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="?attr/colorOutlineVariant"
+        android:layout_marginBottom="18dp" />
+
+    <!-- 输入框区域 -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/til_friend_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="好友名称"
+        app:boxCornerRadiusBottomStart="16dp"
+        app:boxCornerRadiusBottomEnd="16dp"
+        app:boxCornerRadiusTopStart="16dp"
+        app:boxCornerRadiusTopEnd="16dp"
+        app:startIconDrawable="@drawable/ic_mine"
+        app:startIconTint="?attr/colorPrimary"
+        app:counterEnabled="true"
+        app:counterMaxLength="20"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/et_friend_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPersonName"
+            android:maxLength="20"
+            android:padding="14dp"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- UID 字段（可选） -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/til_friend_uid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="好友 UID（可选，精确查找）"
+        app:boxCornerRadiusBottomStart="16dp"
+        app:boxCornerRadiusBottomEnd="16dp"
+        app:boxCornerRadiusTopStart="16dp"
+        app:boxCornerRadiusTopEnd="16dp"
+        app:startIconDrawable="@drawable/ic_settings"
+        app:startIconTint="?attr/colorTertiary"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/et_friend_uid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:digits="0123456789abcdef-"
+            android:maxLength="36"
+            android:padding="14dp"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- 提示文本 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="💡 添加好友后可立即在聊天页发起对话"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:alpha="0.7" />
+
+    <!-- 按钮行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_cancel_add"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="取消"
+            app:cornerRadius="14dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_confirm_add"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:text="添加好友"
+            app:cornerRadius="14dp"
+            app:icon="@drawable/ic_chat" />
+    </LinearLayout>
+
+    <!-- 底部小字提示 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="调试模式 · 好友数据保存在本地"
+        android:textAppearance="?attr/textAppearanceCaption"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:alpha="0.5" />
+</LinearLayout>

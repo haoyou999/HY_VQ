@@ -1,0 +1,8 @@
+{
+  "id": "bili_oauth",
+  "name": "B站",
+  "version": "0.1.0-beta",
+  "mainClass": "com.aliya.hyvq.bili.BiliModule",
+  "showInDrawer": true,
+  "minBaseVersionCode": 2
+}

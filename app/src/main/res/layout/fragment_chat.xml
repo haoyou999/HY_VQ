@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 默认：好友列表（FrameLayout 叠加：空态提示盖在列表上层，避免纵向排列被挤出屏幕） -->
+    <FrameLayout
+        android:id="@+id/chat_list_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurface">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_friends_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp" />
+
+        <!-- 空态提示：暂无好友数据时展示，避免页面空白 -->
+        <TextView
+            android:id="@+id/chat_empty_hint"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="32dp"
+            android:text="暂无好友\n\n聊天功能正在开发中\n可通过「设置 → 聊天服务器」管理服务"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 分栏模式 -->
+    <LinearLayout
+        android:id="@+id/chat_split_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:background="?attr/colorSurface"
+        android:visibility="gone">
+
+        <!-- 头像栏 -->
+        <LinearLayout
+            android:id="@+id/sidebar_column"
+            android:layout_width="64dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="?attr/colorSurfaceContainerLow"
+            android:elevation="1dp">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_friends_sidebar"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
+        </LinearLayout>
+
+        <!-- 动画分割线 -->
+        <View
+            android:id="@+id/divider_line"
+            android:layout_width="0.5dp"
+            android:layout_height="0dp"
+            android:layout_gravity="top"
+            android:background="?attr/colorOutlineVariant" />
+
+        <!-- 右侧 FrameLayout：聊天 + 好友设置 -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <!-- 聊天面板 -->
+            <LinearLayout
+                android:id="@+id/chat_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="visible">
+
+                <LinearLayout
+                    android:id="@+id/chat_title_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="12dp"
+                    android:background="?attr/colorSurface"
+                    android:elevation="2dp"
+                    android:alpha="0">
+
+                    <TextView
+                        android:id="@+id/chat_friend_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:paddingVertical="14dp"
+                        android:text=""
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <ImageView
+                        android:id="@+id/chat_friend_menu"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:src="@drawable/ic_more_vert"
+                        android:contentDescription="好友设置"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackgroundBorderless"
+                        android:tint="?attr/colorOnSurfaceVariant" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0.5dp"
+                    android:background="?attr/colorOutlineVariant" />
+
+                <ScrollView
+                    android:id="@+id/chat_scroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:id="@+id/chat_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </ScrollView>
+
+                <LinearLayout
+                    android:id="@+id/chat_input_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="6dp"
+                    android:background="?attr/colorSurface"
+                    android:elevation="4dp"
+                    android:visibility="gone">
+
+                    <!-- 附件按钮 -->
+                    <FrameLayout
+                        android:id="@+id/btn_attach"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_attach_btn"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackgroundBorderless">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:text="+"
+                            android:textStyle="bold"
+                            android:textSize="20sp"
+                            android:textColor="?attr/colorOnSecondaryContainer" />
+                    </FrameLayout>
+
+                    <EditText
+                        android:id="@+id/chat_input"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="输入消息..."
+                        android:singleLine="true"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_edit_text"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
+
+                    <!-- Emoji 按钮 -->
+                    <FrameLayout
+                        android:id="@+id/btn_emoji"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="4dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackgroundBorderless">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:text="😊"
+                            android:textSize="18sp" />
+                    </FrameLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/chat_send"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="发送"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="14dp"
+                        app:cornerRadius="20dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 好友设置页（从右滑入） -->
+            <LinearLayout
+                android:id="@+id/friend_settings_page"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:background="?attr/colorSurface"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="16dp"
+                    android:background="?attr/colorSurface"
+                    android:elevation="2dp">
+
+                    <ImageView
+                        android:id="@+id/btn_back_friend_settings"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:src="@drawable/ic_arrow_back"
+                        android:contentDescription="返回"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackgroundBorderless" />
+
+                    <TextView
+                        android:id="@+id/friend_settings_name"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:paddingVertical="14dp"
+                        android:text="好友设置"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="?attr/colorOnSurface" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0.5dp"
+                    android:background="?attr/colorOutlineVariant" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:padding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="72dp"
+                            android:layout_height="72dp"
+                            app:cardCornerRadius="36dp"
+                            app:cardElevation="2dp"
+                            app:cardBackgroundColor="?attr/colorPrimaryContainer">
+
+                            <TextView
+                                android:id="@+id/friend_settings_avatar"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="?"
+                                android:textStyle="bold"
+                                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                                android:textColor="?attr/colorOnPrimaryContainer" />
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <TextView
+                            android:id="@+id/friend_settings_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text=""
+                            android:textAppearance="?attr/textAppearanceTitleMedium"
+                            android:textColor="?attr/colorOnSurface" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_clear_chat"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="24dp"
+                            android:text="清空聊天记录"
+                            app:cornerRadius="12dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_delete_friend"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="删除好友"
+                            android:textColor="?attr/colorError"
+                            app:cornerRadius="12dp" />
+                    </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

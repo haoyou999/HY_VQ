@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HY_VQ 自绘联机对话框骨架（玻璃拟态风格，适配深浅色主题） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_glass_dialog"
+    android:padding="20dp">
+
+    <!-- 标题行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="16dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="?attr/colorSecondaryContainer">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="联机"
+                android:padding="10dp"
+                android:src="@drawable/ic_chat"
+                android:tint="?attr/colorOnSecondaryContainer" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tc_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="房间联机"
+                android:textAppearance="?attr/textAppearanceTitleMedium"
+                android:textColor="?attr/colorOnSurface"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tc_subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="P2P 打洞组网 · 同网直连 · 异地打洞 · 中继兜底"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <!-- 状态指示灯 -->
+        <View
+            android:id="@+id/tc_status_dot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/bg_status_dot" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:background="?attr/colorOutlineVariant"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 状态视图容器（Java 端动态切换子视图） -->
+    <FrameLayout
+        android:id="@+id/tc_state_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="180dp" />
+
+    <!-- 底部关闭按钮 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/tc_close"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="关闭"
+        android:textStyle="bold"
+        app:cornerRadius="12dp" />
+</LinearLayout>

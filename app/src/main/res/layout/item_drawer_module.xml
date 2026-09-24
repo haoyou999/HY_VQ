@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 侧边栏单条模块入口模板 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/drawer_item_root"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="12dp"
+    android:paddingEnd="16dp"
+    android:layout_marginBottom="2dp"
+    android:background="@android:color/transparent"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:id="@+id/drawer_item_icon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:src="@drawable/ic_chat"
+        android:contentDescription="模块"
+        android:tint="?attr/colorOnSurfaceVariant" />
+
+    <TextView
+        android:id="@+id/drawer_item_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="14dp"
+        android:text="模块名"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:textColor="?attr/colorOnSurface"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- 状态小点：运行中/已停止 -->
+    <View
+        android:id="@+id/drawer_item_dot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:background="@drawable/bg_dot_green"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,11 @@
+{
+    "id": "chat_server",
+    "name": "聊天服务",
+    "version": "1.0.0",
+    "versionCode": 1,
+    "mainClass": "com.aliya.hy_vq.module.impl.ChatModule",
+    "showInDrawer": true,
+    "icon": "ic_chat",
+    "minFrameworkVersion": 1,
+    "description": "内置 ChatServer、WebSocket 客户端和 STUN 客户端的聊天模块"
+}

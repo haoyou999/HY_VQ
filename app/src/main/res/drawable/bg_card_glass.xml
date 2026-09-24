@@ -1,0 +1,24 @@
+<!-- 磨砂卡片：半透明白底 + 紫晕叠加 + 圆角 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/glass_light_90" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <!-- 紫光反射层（仅顶部区域） -->
+    <item android:top="0dp" android:bottom="16dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/glass_purple_05" />
+            <corners android:topLeftRadius="20dp" android:topRightRadius="20dp" android:bottomLeftRadius="0dp" android:bottomRightRadius="0dp" />
+        </shape>
+    </item>
+    <!-- 边缘线 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="20dp" />
+            <stroke android:width="1dp" android:color="@color/glass_border_dark" />
+        </shape>
+    </item>
+</layer-list>

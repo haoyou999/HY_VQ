@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 侧边栏头部渐变：Operit 风格深紫底 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:startColor="@color/gradient_start"
+        android:centerColor="@color/gradient_mid"
+        android:endColor="@color/gradient_end"
+        android:angle="180"
+        android:type="linear" />
+</shape>

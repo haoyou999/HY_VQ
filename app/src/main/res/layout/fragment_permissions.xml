@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 权限管理页（紧凑风格）：检查/申请运行时权限，状态就地展示，申请成功不弹窗 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?attr/colorSurface"
+    android:paddingTop="6dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        android:text="运行时权限"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorPrimary" />
+
+    <!-- 通知权限 -->
+    <LinearLayout android:id="@+id/item_perm_notification" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="10dp">
+        <com.google.android.material.card.MaterialCardView android:layout_width="36dp" android:layout_height="36dp" app:cardCornerRadius="10dp" app:cardElevation="0dp" app:cardBackgroundColor="?attr/colorSecondaryContainer">
+            <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_chat" android:contentDescription="通知" android:padding="8dp" android:tint="?attr/colorSecondary" />
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:text="通知" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
+        <TextView android:id="@+id/tv_notification_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="检查中…" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
+
+    <!-- 房间联机（P2P 组网）：同网直连 + 异地 STUN 打洞，无需 VPN/任何系统授权 -->
+    <LinearLayout android:id="@+id/item_perm_vpn" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="10dp">
+        <com.google.android.material.card.MaterialCardView android:layout_width="36dp" android:layout_height="36dp" app:cardCornerRadius="10dp" app:cardElevation="0dp" app:cardBackgroundColor="?attr/colorTertiaryContainer">
+            <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_settings" android:contentDescription="联机" android:padding="8dp" android:tint="?attr/colorTertiary" />
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:text="房间联机（P2P 组网）" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
+        <TextView android:id="@+id/tv_vpn_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="检查中…" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
+
+    <!-- 说明 -->
+    <TextView
+        android:id="@+id/tv_perm_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="12dp"
+        android:text="说明：网络、前台服务等为普通权限，安装时由系统自动授予，无需手动申请。通知权限仅 Android 13+ 需要；房间联机走 P2P 组网：同网 UDP 组播 + TCP 直连，异地 STUN 打洞 + 公共信令，无需 VPN 等任何系统授权。"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+</LinearLayout>

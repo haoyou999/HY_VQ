@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 三条杠（汉堡）菜单图标：文件管理页左上角导航按钮，点击弹出内部侧边栏 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M3,6h18v2H3V6z M3,11h18v2H3v-2z M3,16h18v2H3v-2z" />
+</vector>

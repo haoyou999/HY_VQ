@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?attr/colorSurface"
+    android:padding="16dp">
+
+    <!-- 顶部安装按钮 -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_install_module"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="安装模块"
+        android:textSize="15sp"
+        app:cornerRadius="14dp"
+        app:icon="@drawable/ic_chat"
+        app:iconGravity="textStart"
+        app:iconPadding="8dp" />
+
+    <!-- 提示文字 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="支持 .zip 格式的 HY_VQ 模块包"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:paddingHorizontal="4dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp"
+        android:background="?attr/colorOutlineVariant" />
+
+    <!-- 模块列表标题 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="已安装模块"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <TextView
+            android:id="@+id/tv_module_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 个"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
+
+    <!-- 模块列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recycler_modules"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp" />
+
+    <!-- 空状态提示 -->
+    <TextView
+        android:id="@+id/tv_empty_hint"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="暂无已安装的模块\n点击上方按钮安装一个吧"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:lineSpacingExtra="6dp"
+        android:visibility="gone" />
+</LinearLayout>

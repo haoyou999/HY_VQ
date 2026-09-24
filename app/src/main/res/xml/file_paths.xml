@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 文件管理模块：全盘浏览（MANAGE_EXTERNAL_STORAGE 授权后），
+         打开任意路径文件都需要 FileProvider 暴露 root-path -->
+    <root-path name="root" path="." />
+</paths>
