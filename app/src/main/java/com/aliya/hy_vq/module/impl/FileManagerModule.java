@@ -1314,10 +1314,11 @@ public class FileManagerModule extends HyVqModule {
                     openLink(p, e);
                 } else if (e.type == FileEntry.Type.VIRTUAL_FILE && !saf) {
                     ModuleUiKit.toast(ctx, "虚拟条目，仅可查看信息");
-                } else if (saf) {
-                    openSafFile(e); // SAF 授权文件：uri 直发系统
                 } else {
-                    openFile(new File(e.path));
+                    // ⭐ 长按菜单入口：**始终弹「打开方式」弹窗**，让用户自选内置或系统方式。
+                    // 不能走 openFile/openSafFile —— 那两条是「单击」用的直连内置逻辑，
+                    // 会在格式明确时直接打开，导致此入口失去「选择其他方式」的作用。
+                    showOpenWithDialog(e.path, e.name, saf);
                 }
                 break;
             case "编辑":
