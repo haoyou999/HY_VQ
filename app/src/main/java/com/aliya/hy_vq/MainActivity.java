@@ -1517,6 +1517,22 @@ public class MainActivity extends AppCompatActivity {
                 .append("· 在线下载 APK → MD5 完整性校验 → 系统安装器安装\n")
                 .append("· 不再使用 zip 更新包，也无需手动导入\n")
                 .append("· 用户数据（书签/设置/偏好）全部保留");
+        // 缓存检测：缓存里已有比当前版本更新的安装包 → 提示并可直接安装
+        // （原生安装器不会删除缓存 APK，故每次打开都主动检查，避免重复下载）
+        final File[] cachedNewer = findCachedNewerApks(pkgCode);
+        if (cachedNewer.length > 0) {
+            File newest = cachedNewer[0];
+            for (File f : cachedNewer) {
+                if (f.lastModified() > newest.lastModified()) newest = f;
+            }
+            sb.append("\n📦 检测到已下载的更新包：").append(cachedApkLabel(newest))
+                    .append("（").append(fmtSize(newest.length())).append("）")
+                    .append("\n无需重新下载，可直接安装。");
+            final File installTarget = newest;
+            cachedInstallTarget = installTarget;
+        } else {
+            cachedInstallTarget = null;
+        }
         info.setText(sb.toString());
         box.addView(info);
 
@@ -1529,6 +1545,12 @@ public class MainActivity extends AppCompatActivity {
         btns.addView(updateTextButton("检查更新", v -> {
             checkRemoteUpdate(dialog);
         }));
+        if (cachedInstallTarget != null) {
+            btns.addView(updateTextButton("直接安装", v -> {
+                dialog.dismiss();
+                installApk(cachedInstallTarget);
+            }));
+        }
         dialog.show();
     }
 
@@ -1555,6 +1577,8 @@ public class MainActivity extends AppCompatActivity {
     /** release 资产基址：latest.json 里 apk 写文件名即可，自动指向最新 release */
     private static final String REMOTE_UPD_BASE =
             "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
+    /** 本次打开「软件更新」时检测到的可安装缓存包（供「直接安装」按钮使用） */
+    private File cachedInstallTarget;
     private static final String REMOTE_MANIFEST =
             "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/main/latest.json";
 
@@ -1628,6 +1652,11 @@ public class MainActivity extends AppCompatActivity {
         final String rLog = j.optString("changelog", "");
         final long rSize = j.optLong("size", 0L);
 
+        // 缓存检测：同版本安装包若已下载且大小吻合，直接安装，不重复下载
+        final File cached = updateCacheFile(rCode);
+        final boolean hasCache = cached.exists() && cached.length() > 0
+                && (rSize <= 0 || cached.length() == rSize);
+
         int cur = UpdateManager.currentVersion(this);
         if (cur <= 0) {
             try {
@@ -1668,6 +1697,9 @@ public class MainActivity extends AppCompatActivity {
         if (rSize > 0) {
             sb.append("安装包大小：").append(String.format(java.util.Locale.CHINA, "%.1f", rSize / 1048576.0)).append(" MB\n");
         }
+        if (hasCache) {
+            sb.append("\n📦 安装包已在缓存中（").append(fmtSize(cached.length())).append("），可直接安装\n");
+        }
         sb.append("\n更新内容：\n");
         sb.append(rLog.isEmpty() ? "· 细节优化与问题修复" : rLog);
         tv.setText(sb.toString());
@@ -1678,36 +1710,92 @@ public class MainActivity extends AppCompatActivity {
         } else {
             final String apkUrl = rApk.startsWith("http") ? rApk : REMOTE_UPD_BASE + rApk;
             btns.addView(updateTextButton("稍后", v -> d.dismiss()));
-            btns.addView(updateTextButton("立即更新", v -> downloadAndInstall(apkUrl, rMd5, d)));
+            btns.addView(updateTextButton(hasCache ? "立即安装" : "立即更新",
+                    v -> startUpdate(apkUrl, rMd5, rSize, rCode, d)));
         }
         box.addView(btns);
         d.show();
     }
 
-    /** 下载 APK → MD5 校验 → 拉起系统安装器 */
-    private void downloadAndInstall(final String apkUrl, final String expectMd5, final android.app.Dialog dialog) {
+    // ── 更新包缓存（原生安装器不会自动删除缓存 APK，故自行管理）──
+
+    private File updateCacheDir() {
+        return getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
+    }
+
+    /** 指定版本的缓存安装包路径（按 versionCode 命名，便于复用与甄别） */
+    private File updateCacheFile(int versionCode) {
+        return new File(updateCacheDir(), "hyvq_update_" + versionCode + ".apk");
+    }
+
+    /** 清理缓存安装包：keep 为 null 时全部清除，否则只保留 keep */
+    private void cleanUpdateCache(File keep) {
+        File[] fs = updateCacheDir().listFiles();
+        if (fs == null) return;
+        for (File f : fs) {
+            String n = f.getName();
+            boolean isPkg = (n.startsWith("hyvq_update_") && n.endsWith(".apk")) || n.endsWith(".apk.part");
+            if (isPkg && (keep == null || !f.getAbsolutePath().equals(keep.getAbsolutePath()))) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+    }
+
+    /** 扫描缓存中比当前版本更新的安装包 —— 不依赖网络即可发现「已下载待安装」 */
+    private File[] findCachedNewerApks(int currentVersionCode) {
+        java.util.List<File> out = new java.util.ArrayList<>();
+        File[] fs = updateCacheDir().listFiles();
+        if (fs != null) {
+            for (File f : fs) {
+                String n = f.getName();
+                if (!n.startsWith("hyvq_update_") || !n.endsWith(".apk") || f.length() <= 0) continue;
+                android.content.pm.PackageInfo pi =
+                        getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
+                if (pi != null && pi.versionCode > currentVersionCode) out.add(f);
+            }
+        }
+        return out.toArray(new File[0]);
+    }
+
+    private String cachedApkLabel(File apk) {
+        android.content.pm.PackageInfo pi =
+                getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+        return pi == null ? apk.getName() : "v" + pi.versionName + " (code " + pi.versionCode + ")";
+    }
+
+    private String fmtSize(long b) {
+        if (b >= 1048576L) return String.format(java.util.Locale.CHINA, "%.1f MB", b / 1048576.0);
+        if (b >= 1024L) return String.format(java.util.Locale.CHINA, "%.0f KB", b / 1024.0);
+        return b + " B";
+    }
+
+    /** 更新入口：缓存命中则直接安装，否则带进度下载 */
+    private void startUpdate(final String apkUrl, final String expectMd5, final long expectSize,
+                             final int versionCode, final android.app.Dialog dialog) {
+        final File target = updateCacheFile(versionCode);
+        boolean hit = target.exists() && target.length() > 0
+                && (expectSize <= 0 || target.length() == expectSize);
+        if (hit) {
+            verifyAndInstall(target, expectMd5, dialog);
+        } else {
+            downloadWithProgress(apkUrl, expectMd5, expectSize, target, dialog);
+        }
+    }
+
+    /** 校验已有缓存包后安装（MD5 不符即清除，避免反复安装坏包） */
+    private void verifyAndInstall(final File apk, final String expectMd5, final android.app.Dialog dialog) {
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
-        Toast.makeText(this, "开始下载更新包…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "安装包已在缓存中，正在校验…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             String err = null;
-            File dir = getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
-            File out = new File(dir, "hyvq_update.apk");
             try {
-                java.net.HttpURLConnection conn = openRemote(apkUrl, "GET");
-                int code = conn.getResponseCode();
-                if (code != 200) throw new Exception("HTTP " + code);
-                try (java.io.InputStream in = conn.getInputStream();
-                     java.io.FileOutputStream fos = new java.io.FileOutputStream(out)) {
-                    byte[] buf = new byte[16384];
-                    int n;
-                    while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
-                }
-                conn.disconnect();
-                if (out.length() <= 0) throw new Exception("下载内容为空");
                 if (expectMd5 != null && !expectMd5.isEmpty()) {
-                    String actual = md5Of(out);
+                    String actual = md5Of(apk);
                     if (!expectMd5.equalsIgnoreCase(actual)) {
-                        throw new Exception("MD5 校验不通过（期望 " + expectMd5 + "，实际 " + actual + "）");
+                        //noinspection ResultOfMethodCallIgnored
+                        apk.delete();
+                        throw new Exception("缓存安装包已损坏（MD5 不符），已清除，请重新下载");
                     }
                 }
             } catch (Exception e) {
@@ -1716,9 +1804,103 @@ public class MainActivity extends AppCompatActivity {
             final String ferr = err;
             runOnUiThread(() -> {
                 if (ferr != null) {
+                    Toast.makeText(this, ferr, Toast.LENGTH_LONG).show();
+                } else {
+                    cleanUpdateCache(apk);
+                    installApk(apk);
+                }
+            });
+        }).start();
+    }
+
+    /** 带进度的下载：进度条实时刷新，完成后校验 MD5 再拉起安装器 */
+    private void downloadWithProgress(final String apkUrl, final String expectMd5,
+                                      final long expectSize, final File target,
+                                      final android.app.Dialog dialog) {
+        if (dialog != null && dialog.isShowing()) dialog.dismiss();
+        cleanUpdateCache(null);   // 下载前清掉旧版本残留
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "⬇ 正在下载更新"));
+
+        final TextView tvPct = new TextView(this);
+        tvPct.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tvPct.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        int pad = dp2(4);
+        tvPct.setPadding(pad, pad, pad, pad);
+        tvPct.setText("准备中…");
+        box.addView(tvPct);
+
+        final android.widget.ProgressBar pb = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        pb.setMax(100);
+        pb.setProgress(0);
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp2(8));
+        plp.topMargin = dp2(6);
+        box.addView(pb, plp);
+
+        final android.app.Dialog pd = ModuleUiKit.glassDialog(this, box);
+        pd.setCancelable(false);
+        pd.show();
+
+        new Thread(() -> {
+            String err = null;
+            final File tmp = new File(target.getParentFile(), target.getName() + ".part");
+            try {
+                java.net.HttpURLConnection conn = openRemote(apkUrl, "GET");
+                int code = conn.getResponseCode();
+                if (code != 200) throw new Exception("HTTP " + code);
+                long total = expectSize > 0 ? expectSize : conn.getContentLength();
+                long done = 0;
+                int lastPct = -1;
+                try (java.io.InputStream in = conn.getInputStream();
+                     java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp)) {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        fos.write(buf, 0, n);
+                        done += n;
+                        if (total > 0) {
+                            int pct = (int) Math.min(100, done * 100 / total);
+                            if (pct != lastPct) {
+                                lastPct = pct;
+                                final int fp = pct;
+                                final long fd = done, ft = total;
+                                runOnUiThread(() -> {
+                                    pb.setProgress(fp);
+                                    tvPct.setText(fp + "%    " + fmtSize(fd) + " / " + fmtSize(ft));
+                                });
+                            }
+                        }
+                    }
+                }
+                conn.disconnect();
+                if (tmp.length() <= 0) throw new Exception("下载内容为空");
+                if (expectMd5 != null && !expectMd5.isEmpty()) {
+                    String actual = md5Of(tmp);
+                    if (!expectMd5.equalsIgnoreCase(actual)) {
+                        throw new Exception("MD5 校验不通过，安装包可能被篡改或下载不完整");
+                    }
+                }
+                //noinspection ResultOfMethodCallIgnored
+                if (target.exists()) target.delete();
+                if (!tmp.renameTo(target)) throw new Exception("无法写入缓存目录");
+            } catch (Exception e) {
+                err = e.getMessage();
+                //noinspection ResultOfMethodCallIgnored
+                if (tmp.exists()) tmp.delete();
+            }
+            final String ferr = err;
+            final File ftarget = target;
+            runOnUiThread(() -> {
+                if (pd.isShowing()) pd.dismiss();
+                if (ferr != null) {
                     Toast.makeText(this, "下载失败：" + ferr, Toast.LENGTH_LONG).show();
                 } else {
-                    installApk(out);
+                    cleanUpdateCache(ftarget);   // 只保留刚下载的这版
+                    installApk(ftarget);
                 }
             });
         }).start();
