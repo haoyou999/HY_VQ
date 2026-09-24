@@ -132,19 +132,19 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ══════════ ③ 可用版本列表（扫描全部 Release） ══════════ -->
+        <!-- ══════════ ③ 最新版本 ══════════ -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="2dp"
             android:layout_marginStart="4dp"
-            android:text="可用版本"
+            android:text="最新版本"
             android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorPrimary" />
 
         <LinearLayout
-            android:id="@+id/box_release_list"
+            android:id="@+id/box_latest_version"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
@@ -155,10 +155,73 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:paddingVertical="10dp"
-                android:text="点「检查更新」获取全部可用版本"
+                android:text="点「检查更新」获取版本信息"
                 android:textAppearance="?attr/textAppearanceBodySmall"
                 android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
+
+        <!-- ══════════ ④ 当前版本 ══════════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="2dp"
+            android:layout_marginStart="4dp"
+            android:text="当前版本"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:id="@+id/box_current_version"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <!-- ══════════ ⑤ 历史版本（可折叠） ══════════ -->
+        <LinearLayout
+            android:id="@+id/row_history_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="历史版本"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <TextView
+                android:id="@+id/tv_history_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="展开"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <ImageView
+                android:id="@+id/iv_history_arrow"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_chevron_right"
+                android:contentDescription="展开历史版本" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/box_history_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone" />
 
         <!-- ══════════ ④ 缓存卡（有已下载包时显示） ══════════ -->
         <com.google.android.material.card.MaterialCardView
