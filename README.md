@@ -69,6 +69,18 @@ modules/                       模块模板
 libs/terracotta/               Terracotta P2P 运行库
 ```
 
+## 更新源
+
+本仓库**同时充当软件更新源**（不再单独维护更新仓库）：
+
+| 用途 | 地址 |
+|---|---|
+| 版本清单 | `https://raw.githubusercontent.com/haoyou999/HY_VQ/main/latest.json` |
+| 安装包 | `https://github.com/haoyou999/HY_VQ/releases/latest/download/<apk 文件名>` |
+
+公开仓库的 raw 文件与 Release 资产均为**无鉴权直链**，因此客户端 APK 内不含任何账号或密钥。
+应用内「设置 → 软件更新」即按上述地址检查新版本、下载 APK 并校验 MD5 后交由系统安装器安装。
+
 ## 开源许可
 
 本项目以 **GNU General Public License v3.0** 发布，详见 [LICENSE](LICENSE)。

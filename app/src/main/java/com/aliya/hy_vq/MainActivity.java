@@ -1538,7 +1538,8 @@ public class MainActivity extends AppCompatActivity {
     // 2026-09-06 变更：更新源从自建 WebDAV 迁到 GitHub —— 公开仓库的 raw 文件与
     // release 资产都是**无鉴权直链**，天然只读，APK 内不再内置任何账号密码。
     private static final String GH_OWNER = "haoyou999";
-    private static final String GH_REPO = "HY_VQ-updates";
+    /** 更新源与源码同仓：latest.json 在仓库根，APK 走该仓的 Release 资产 */
+    private static final String GH_REPO = "HY_VQ";
     /** release 资产基址：latest.json 里 apk 写文件名即可，自动指向最新 release */
     private static final String REMOTE_UPD_BASE =
             "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
