@@ -111,12 +111,12 @@ public class MainActivity extends AppCompatActivity {
     /** 远程检查状态：0 未检查 / 1 检查中 / 2 检查完成无新版 / 4 检查失败 */
     private int updState = 0;
     private String updError = "";
-    /** 最近一次检查到的远程清单 */
-    private org.json.JSONObject updRemote;
+    /** 扫描到的全部可用版本（按版本号倒序，第 0 个为最新） */
+    private java.util.List<ReleaseInfo> updReleases = new java.util.ArrayList<>();
     /** 本机缓存中可安装的更新包（比当前版本新） */
     private File updCachedApk;
     /** 已弹过更新提示的版本号：同一版本不在本次会话内重复打扰 */
-    private int autoPromptedCode = -1;
+    private String autoPromptedVer = "";
     /** 开源仓库地址（与 README / LICENSE 一致） */
     private static final String OPEN_SOURCE_URL = "https://github.com/haoyou999/HY_VQ";
     private static final int PAGE_SETTINGS = 3;
@@ -1513,17 +1513,13 @@ public class MainActivity extends AppCompatActivity {
     private static final String GH_OWNER = "haoyou999";
     /** 更新源与源码同仓：latest.json 在仓库根，APK 走该仓的 Release 资产 */
     private static final String GH_REPO = "HY_VQ";
-    /** release 资产基址：latest.json 里 apk 写文件名即可，自动指向最新 release */
-    private static final String REMOTE_UPD_BASE =
-            "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
     /** 启动时自动检查更新的偏好键（默认开启） */
     private static final String PREF_AUTO_CHECK_UPDATE = "auto_check_update";
-    /** 首选：GitHub API（实时，无 CDN 缓存；未鉴权 60 次/小时/IP，更新检查频率远低于此） */
-    private static final String REMOTE_MANIFEST_API =
-            "https://api.github.com/repos/" + GH_OWNER + "/" + GH_REPO + "/contents/latest.json";
-    /** 回退：raw 直链（⚠️ CDN 有 5 分钟缓存，发版后短时内可能读到旧清单） */
-    private static final String REMOTE_MANIFEST =
-            "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/main/latest.json";
+    /** 版本列表来源：GitHub Releases API —— 一次请求拿到全部版本，
+     *  每个版本自带<b>精确</b>下载直链（browser_download_url）。
+     *  不再依赖 latest.json，也不会出现「latest 前缀 + 旧文件名」导致的 404。 */
+    private static final String REMOTE_RELEASES =
+            "https://api.github.com/repos/" + GH_OWNER + "/" + GH_REPO + "/releases?per_page=30";
 
     /** 打开远程只读连接（无鉴权）。
      *  某些 CDN 会 302 跳转，故手动跟随（最多 5 跳），不依赖 HttpURLConnection 自动跟随。
@@ -1557,6 +1553,44 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ==================== 软件更新页 ====================
+
+    /** 一个可用版本（来自 GitHub Releases API） */
+    private static class ReleaseInfo {
+        String tag = "";
+        String ver = "";
+        String body = "";
+        String publishedAt = "";
+        String apkName = "";
+        String apkUrl = "";     // 精确下载直链，永不 404
+        long apkSize = 0L;
+
+        String date() {
+            return publishedAt.length() >= 10 ? publishedAt.substring(0, 10) : publishedAt;
+        }
+    }
+
+    /** 语义化版本比较：a > b 返回正数 */
+    private static int compareVersion(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        String[] x = a.split("[.]");
+        String[] y = b.split("[.]");
+        int n = Math.max(x.length, y.length);
+        for (int i = 0; i < n; i++) {
+            int xi = i < x.length ? parseIntSafe(x[i]) : 0;
+            int yi = i < y.length ? parseIntSafe(y[i]) : 0;
+            if (xi != yi) return xi - yi;
+        }
+        return 0;
+    }
+
+    private static int parseIntSafe(String v) {
+        try {
+            return Integer.parseInt(v.trim().replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
 
     private void switchToUpdate() {
         if (updateView == null) {
@@ -1616,12 +1650,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 统一渲染更新页内容：状态卡 / 更新日志卡 / 缓存卡 / 操作按钮 */
+    /** 统一渲染更新页：当前版本 / 状态卡 / 可用版本列表 / 缓存卡 / 操作按钮 */
     private void renderUpdateView() {
         if (updateView == null) return;
         final int cur = currentPkgCode();
+        final String curVer = baseVersionName();
 
         TextView tvCur = updateView.findViewById(R.id.tv_upd_current);
-        if (tvCur != null) tvCur.setText("v" + baseVersionName());
+        if (tvCur != null) tvCur.setText("v" + curVer);
         TextView tvChan = updateView.findViewById(R.id.tv_upd_channel);
         if (tvChan != null) tvChan.setText("版本号 " + cur + " · 稳定版");
 
@@ -1634,9 +1670,8 @@ public class MainActivity extends AppCompatActivity {
             updCachedApk = best;
         }
 
-        final int rCode = updRemote == null ? 0 : updRemote.optInt("versionCode", 0);
-        final String rName = updRemote == null ? "" : updRemote.optString("versionName", "");
-        final boolean hasNew = rCode > cur;
+        final ReleaseInfo newest = updReleases.isEmpty() ? null : updReleases.get(0);
+        final boolean hasNew = newest != null && compareVersion(newest.ver, curVer) > 0;
         final boolean canInstall = hasNew || updCachedApk != null;
 
         // ── 状态卡 ──
@@ -1644,16 +1679,16 @@ public class MainActivity extends AppCompatActivity {
         TextView desc = updateView.findViewById(R.id.tv_upd_status_desc);
         ImageView icon = updateView.findViewById(R.id.iv_upd_status_icon);
         if (updState == 1) {
-            if (title != null) title.setText("正在检查更新…");
-            if (desc != null) desc.setText("正在连接更新源，请稍候");
+            if (title != null) title.setText("正在扫描版本…");
+            if (desc != null) desc.setText("正在获取全部可用版本，请稍候");
             if (icon != null) icon.setImageResource(R.drawable.ic_refresh);
         } else if (updState == 4) {
-            if (title != null) title.setText("检查更新失败");
+            if (title != null) title.setText("获取版本列表失败");
             if (desc != null) desc.setText(updError.isEmpty() ? "无法连接更新源，请检查网络后重试" : updError);
             if (icon != null) icon.setImageResource(R.drawable.ic_network);
         } else if (hasNew) {
-            if (title != null) title.setText("发现新版本 v" + rName);
-            if (desc != null) desc.setText("版本号 " + rCode + " · 建议更新以获得最新修复");
+            if (title != null) title.setText("发现新版本 v" + newest.ver);
+            if (desc != null) desc.setText("已扫描到 " + updReleases.size() + " 个版本，可在下方选择任意版本安装");
             if (icon != null) icon.setImageResource(R.drawable.ic_download);
         } else if (updCachedApk != null) {
             if (title != null) title.setText("可安装 " + cachedApkLabel(updCachedApk));
@@ -1661,42 +1696,15 @@ public class MainActivity extends AppCompatActivity {
             if (icon != null) icon.setImageResource(R.drawable.ic_download);
         } else if (updState == 2) {
             if (title != null) title.setText("已是最新版本");
-            if (desc != null) desc.setText("当前 v" + baseVersionName() + "，无需更新");
+            if (desc != null) desc.setText("已扫描 " + updReleases.size() + " 个版本，下方可查看或重装任意版本");
             if (icon != null) icon.setImageResource(R.drawable.ic_star);
         } else {
             if (title != null) title.setText("检查更新");
-            if (desc != null) desc.setText("点击下方按钮获取最新版本信息");
+            if (desc != null) desc.setText("点「检查更新」扫描全部可用版本");
             if (icon != null) icon.setImageResource(R.drawable.ic_refresh);
         }
 
-        // ── 更新日志卡 ──
-        View logCard = updateView.findViewById(R.id.card_upd_changelog);
-        if (logCard != null) {
-            if (hasNew) {
-                logCard.setVisibility(View.VISIBLE);
-                TextView tvNew = updateView.findViewById(R.id.tv_upd_new_version);
-                if (tvNew != null) tvNew.setText("v" + rName);
-                TextView tvMeta = updateView.findViewById(R.id.tv_upd_meta);
-                if (tvMeta != null) {
-                    long sz = updRemote.optLong("size", 0L);
-                    String pub = updRemote.optString("publishedAt", "");
-                    StringBuilder m = new StringBuilder();
-                    if (sz > 0) m.append(fmtSize(sz));
-                    if (!pub.isEmpty()) {
-                        if (m.length() > 0) m.append(" · ");
-                        m.append(pub);
-                    }
-                    tvMeta.setText(m.toString());
-                }
-                TextView tvLog = updateView.findViewById(R.id.tv_upd_changelog);
-                if (tvLog != null) {
-                    String log = updRemote.optString("changelog", "");
-                    tvLog.setText(log.isEmpty() ? "· 细节优化与问题修复" : log);
-                }
-            } else {
-                logCard.setVisibility(View.GONE);
-            }
-        }
+        renderReleaseList();
 
         // ── 缓存卡 ──
         View cacheCard = updateView.findViewById(R.id.card_upd_cache);
@@ -1705,8 +1713,7 @@ public class MainActivity extends AppCompatActivity {
                 cacheCard.setVisibility(View.VISIBLE);
                 TextView ci = updateView.findViewById(R.id.tv_upd_cache_info);
                 if (ci != null) {
-                    ci.setText(cachedApkLabel(updCachedApk)
-                            + System.lineSeparator()
+                    ci.setText(cachedApkLabel(updCachedApk) + System.lineSeparator()
                             + "大小 " + fmtSize(updCachedApk.length()) + " · 已通过完整性校验");
                 }
             } else {
@@ -1721,10 +1728,8 @@ public class MainActivity extends AppCompatActivity {
         if (btnAction != null) {
             if (canInstall) {
                 btnAction.setVisibility(View.VISIBLE);
-                boolean reuse = updCachedApk != null
-                        && (!hasNew || updCachedApk.length() == updRemote.optLong("size", 0L));
-                ((com.google.android.material.button.MaterialButton) btnAction)
-                        .setText(reuse ? "立即安装（使用缓存）" : "立即更新");
+                ((com.google.android.material.button.MaterialButton) btnAction).setText(
+                        hasNew ? "更新到 v" + newest.ver : "立即安装（使用缓存）");
             } else {
                 btnAction.setVisibility(View.GONE);
             }
@@ -1732,29 +1737,148 @@ public class MainActivity extends AppCompatActivity {
         updateUpdateStateLabel();
     }
 
+    /** 渲染「可用版本」列表：每行可点，下载直链取自 API 返回的精确地址 */
+    private void renderReleaseList() {
+        if (updateView == null) return;
+        LinearLayout box = updateView.findViewById(R.id.box_release_list);
+        if (box == null) return;
+        box.removeAllViews();
+        TextView empty = updateView.findViewById(R.id.tv_release_empty);
+        if (updReleases.isEmpty()) {
+            if (empty != null) empty.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (empty != null) empty.setVisibility(View.GONE);
+
+        final String curVer = baseVersionName();
+        boolean newestMarked = false;
+        for (final ReleaseInfo ri : updReleases) {
+            int cmp = compareVersion(ri.ver, curVer);
+            boolean isCurrent = cmp == 0;
+            boolean isNewer = cmp > 0;
+
+            View row = LayoutInflater.from(this).inflate(R.layout.item_release_version, box, false);
+            ((TextView) row.findViewById(R.id.tv_rel_version)).setText("v" + ri.ver);
+
+            TextView badge = row.findViewById(R.id.tv_rel_badge);
+            if (isCurrent) {
+                badge.setText("当前版本");
+                badge.setVisibility(View.VISIBLE);
+            } else if (isNewer && !newestMarked) {
+                badge.setText("最新");
+                badge.setVisibility(View.VISIBLE);
+                newestMarked = true;
+            } else if (isNewer) {
+                badge.setText("新版");
+                badge.setVisibility(View.VISIBLE);
+            } else {
+                badge.setVisibility(View.GONE);
+            }
+
+            File cached = updateCacheFileByVer(ri.ver);
+            final boolean hasCache = cached.exists() && cached.length() > 0
+                    && (ri.apkSize <= 0 || cached.length() == ri.apkSize);
+
+            StringBuilder meta = new StringBuilder();
+            if (!ri.date().isEmpty()) meta.append(ri.date());
+            if (ri.apkSize > 0) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append(fmtSize(ri.apkSize));
+            }
+            if (hasCache) meta.append(" · 已下载");
+            if (!isCurrent) meta.append(" · 点按查看更新内容");
+            ((TextView) row.findViewById(R.id.tv_rel_meta)).setText(meta.toString());
+
+            ImageView act = row.findViewById(R.id.iv_rel_action);
+            if (act != null) {
+                act.setImageResource(isCurrent ? R.drawable.ic_refresh
+                        : hasCache ? R.drawable.ic_save : R.drawable.ic_download);
+            }
+            final boolean fc = isCurrent, fh = hasCache;
+            row.setOnClickListener(v -> showReleaseDetail(ri, fc, fh));
+            box.addView(row);
+        }
+    }
+
+    /** 版本详情弹窗：完整更新日志 + 下载/安装/重装 */
+    private void showReleaseDetail(final ReleaseInfo ri, boolean isCurrent, boolean hasCache) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "v" + ri.ver));
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tv.setLineSpacing(0, 1.45f);
+        tv.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        int pad = dp2(4);
+        tv.setPadding(pad, pad, pad, pad);
+
+        StringBuilder sb = new StringBuilder();
+        if (!ri.date().isEmpty()) sb.append("发布于 ").append(ri.date());
+        if (ri.apkSize > 0) {
+            if (sb.length() > 0) sb.append("    ");
+            sb.append(fmtSize(ri.apkSize));
+        }
+        if (isCurrent) sb.append("    当前已安装");
+        sb.append(System.lineSeparator()).append(System.lineSeparator());
+        String body = ri.body == null ? "" : ri.body.trim();
+        sb.append(body.isEmpty() ? "· 该版本无更新说明" : body);
+        tv.setText(sb.toString());
+        box.addView(tv);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+
+        final android.app.Dialog d = ModuleUiKit.glassDialog(this, box);
+        btns.addView(updateTextButton("关闭", v -> d.dismiss()));
+        btns.addView(updateTextButton(
+                isCurrent ? "重新安装" : (hasCache ? "直接安装" : "下载并安装"), v -> {
+                    d.dismiss();
+                    File c = updateCacheFileByVer(ri.ver);
+                    boolean hit = c.exists() && c.length() > 0
+                            && (ri.apkSize <= 0 || c.length() == ri.apkSize);
+                    if (hit) {
+                        verifyAndInstall(c, null, null);
+                    } else {
+                        startUpdate(ri.apkUrl, null, ri.apkSize, ri.ver, null);
+                    }
+                }));
+        d.show();
+    }
+
+
+    /** 同步设置页上的更新状态标签 */
     /** 同步设置页上的更新状态标签 */
     private void updateUpdateStateLabel() {
         if (settingsView == null) return;
         TextView tv = settingsView.findViewById(R.id.tv_update_state);
         if (tv == null) return;
-        int cur = currentPkgCode();
-        if (updRemote != null && updRemote.optInt("versionCode", 0) > cur) {
-            tv.setText("有新版 " + updRemote.optString("versionName", ""));
+        String curVer = baseVersionName();
+        if (!updReleases.isEmpty() && compareVersion(updReleases.get(0).ver, curVer) > 0) {
+            tv.setText("有新版 " + updReleases.get(0).ver);
         } else if (updCachedApk != null) {
             tv.setText("待安装");
         } else {
-            tv.setText("v" + baseVersionName());
+            tv.setText("v" + curVer);
         }
     }
 
+
     /** 主操作按钮：按当前状态选择「下载」或「直接安装」 */
+    /** 主操作按钮：更新到最新版，或安装本机缓存包 */
     private void onUpdateAction() {
-        if (updRemote != null) {
-            int rCode = updRemote.optInt("versionCode", 0);
-            String apk = updRemote.optString("apk", "");
-            if (rCode > 0 && !apk.isEmpty()) {
-                String url = apk.startsWith("http") ? apk : REMOTE_UPD_BASE + apk;
-                startUpdate(url, updRemote.optString("md5", ""), updRemote.optLong("size", 0L), rCode, null);
+        if (!updReleases.isEmpty()) {
+            ReleaseInfo newest = updReleases.get(0);
+            if (compareVersion(newest.ver, baseVersionName()) > 0) {
+                File c = updateCacheFileByVer(newest.ver);
+                if (c.exists() && c.length() > 0
+                        && (newest.apkSize <= 0 || c.length() == newest.apkSize)) {
+                    verifyAndInstall(c, null, null);
+                } else {
+                    startUpdate(newest.apkUrl, null, newest.apkSize, newest.ver, null);
+                }
                 return;
             }
         }
@@ -1765,31 +1889,51 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "暂无可安装的更新，请先检查更新", Toast.LENGTH_SHORT).show();
     }
 
-    /** 拉取远程版本清单：优先 GitHub API（实时），失败回退 raw 直链（可能有 5 分钟 CDN 缓存） */
-    private org.json.JSONObject fetchRemoteManifest() {
+
+    /** 扫描全部可用版本（GitHub Releases API），返回列表按版本号倒序 */
+    private java.util.List<ReleaseInfo> fetchReleases() {
+        java.util.List<ReleaseInfo> out = new java.util.ArrayList<>();
         try {
             java.net.HttpURLConnection conn = openRemote(
-                    REMOTE_MANIFEST_API, "GET", "application/vnd.github.raw");
-            if (conn.getResponseCode() == 200) {
-                org.json.JSONObject j = new org.json.JSONObject(readAll(conn.getInputStream()));
+                    REMOTE_RELEASES, "GET", "application/vnd.github+json");
+            if (conn.getResponseCode() != 200) {
                 conn.disconnect();
-                return j;
+                return out;
             }
+            org.json.JSONArray arr = new org.json.JSONArray(readAll(conn.getInputStream()));
             conn.disconnect();
-        } catch (Exception ignored) {
-            // 回退到 raw
-        }
-        try {
-            java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
-            if (conn.getResponseCode() == 200) {
-                org.json.JSONObject j = new org.json.JSONObject(readAll(conn.getInputStream()));
-                conn.disconnect();
-                return j;
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject r = arr.getJSONObject(i);
+                if (r.optBoolean("draft", false) || r.optBoolean("prerelease", false)) continue;
+                ReleaseInfo ri = new ReleaseInfo();
+                ri.tag = r.optString("tag_name", "");
+                ri.ver = ri.tag.startsWith("v") ? ri.tag.substring(1) : ri.tag;
+                if (ri.ver.isEmpty()) continue;
+                ri.body = r.optString("body", "");
+                ri.publishedAt = r.optString("published_at", "");
+                org.json.JSONArray assets = r.optJSONArray("assets");
+                if (assets != null) {
+                    for (int k = 0; k < assets.length(); k++) {
+                        org.json.JSONObject a = assets.getJSONObject(k);
+                        String nm = a.optString("name", "");
+                        String url = a.optString("browser_download_url", "");
+                        if (!nm.endsWith(".apk") || url.isEmpty()) continue;
+                        // 优先取文件名含本版本号的资产，避免误选其它 apk
+                        boolean better = ri.apkUrl.isEmpty()
+                                || (nm.contains(ri.ver) && !ri.apkName.contains(ri.ver));
+                        if (better) {
+                            ri.apkName = nm;
+                            ri.apkUrl = url;
+                            ri.apkSize = a.optLong("size", 0L);
+                        }
+                    }
+                }
+                if (!ri.apkUrl.isEmpty()) out.add(ri);
             }
-            conn.disconnect();
         } catch (Exception ignored) {
         }
-        return null;
+        java.util.Collections.sort(out, (a, b) -> compareVersion(b.ver, a.ver));
+        return out;
     }
 
     /** 启动时自动检查更新：受开关控制，静默进行，只在发现新版本时提示 */
@@ -1800,42 +1944,33 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 后台静默检查：不显示「检查中」，发现新版本才提示 */
+    /** 后台静默扫描版本列表：不显示「扫描中」，发现新版本才弹窗 */
     private void silentCheckUpdate() {
         new Thread(() -> {
-            final org.json.JSONObject fj = fetchRemoteManifest();   // 失败静默，不打扰用户
-            if (fj == null) return;
+            final java.util.List<ReleaseInfo> list = fetchReleases();
+            if (list.isEmpty()) return;
             runOnUiThread(() -> {
-                // 用户若已手动检查过（状态更"新"），不覆盖其结果
-                if (updState == 1) return;
-                updRemote = fj;
+                if (updState == 1) return;   // 用户手动扫描中，不覆盖
+                updReleases = list;
                 updState = 2;
-                if (updateView != null) {
-                    renderUpdateView();
-                } else {
-                    updateUpdateStateLabel();
-                }
-                if (fj.optInt("versionCode", 0) > currentPkgCode()) {
-                    showAutoUpdatePrompt(fj);
-                }
+                if (updateView != null) renderUpdateView();
+                else updateUpdateStateLabel();
+                ReleaseInfo newest = list.get(0);
+                if (compareVersion(newest.ver, baseVersionName()) > 0) showAutoUpdatePrompt(newest);
             });
         }).start();
     }
 
+
     /** 自动检查发现新版本时弹出提示，由用户决定是否更新 */
-    private void showAutoUpdatePrompt(final org.json.JSONObject j) {
-        final int rCode = j.optInt("versionCode", 0);
-        final String rName = j.optString("versionName", "?");
-        final String rApk = j.optString("apk", "");
-        final String rMd5 = j.optString("md5", "");
-        final long rSize = j.optLong("size", 0L);
-        final String rLog = j.optString("changelog", "");
+    /** 自动扫描发现新版本时弹出提示，由用户决定是否更新 */
+    private void showAutoUpdatePrompt(final ReleaseInfo ri) {
+        if (ri == null || ri.ver.isEmpty() || autoPromptedVer.equals(ri.ver)) return;
+        autoPromptedVer = ri.ver;
 
-        if (rCode <= 0 || autoPromptedCode == rCode) return;   // 同一版本只提示一次
-        autoPromptedCode = rCode;
-
-        final File cached = updateCacheFile(rCode);
+        final File cached = updateCacheFileByVer(ri.ver);
         final boolean hasCache = cached.exists() && cached.length() > 0
-                && (rSize <= 0 || cached.length() == rSize);
+                && (ri.apkSize <= 0 || cached.length() == ri.apkSize);
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1849,17 +1984,15 @@ public class MainActivity extends AppCompatActivity {
         tv.setPadding(pad, pad, pad, pad);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("v").append(rName).append("  (code ").append(rCode).append(")");
-        if (rSize > 0) sb.append("    ").append(fmtSize(rSize));
+        sb.append("v").append(ri.ver);
+        if (ri.apkSize > 0) sb.append("    ").append(fmtSize(ri.apkSize));
+        if (!ri.date().isEmpty()) sb.append("    ").append(ri.date());
         sb.append(System.lineSeparator()).append(System.lineSeparator());
 
-        // 更新日志只显示前若干条，完整内容可点「详情」进更新页查看
         final int MAX_LINES = 6;
         java.util.List<String> lines = new java.util.ArrayList<>();
-        if (!rLog.isEmpty()) {
-            for (String ln : rLog.split(System.lineSeparator())) {
-                if (!ln.trim().isEmpty()) lines.add(ln);
-            }
+        for (String ln : ri.body.split(System.lineSeparator())) {
+            if (!ln.trim().isEmpty()) lines.add(ln);
         }
         if (lines.isEmpty()) {
             sb.append("· 细节优化与问题修复");
@@ -1889,36 +2022,37 @@ public class MainActivity extends AppCompatActivity {
             dialog.dismiss();
             switchToUpdate();
         }));
-        if (!rApk.isEmpty()) {
-            final String url = rApk.startsWith("http") ? rApk : REMOTE_UPD_BASE + rApk;
-            btns.addView(updateTextButton(hasCache ? "立即安装" : "立即更新", v -> {
-                dialog.dismiss();
-                startUpdate(url, rMd5, rSize, rCode, null);
-            }));
-        }
+        btns.addView(updateTextButton(hasCache ? "立即安装" : "立即更新", v -> {
+            dialog.dismiss();
+            if (hasCache) verifyAndInstall(cached, null, null);
+            else startUpdate(ri.apkUrl, null, ri.apkSize, ri.ver, null);
+        }));
         dialog.show();
     }
 
+
     /** 检查更新：拉取远程清单后刷新页面（结果全部体现在页面内容里） */
+    /** 检查更新：扫描全部可用版本后刷新页面（结果全部体现在页面内容里） */
     private void checkRemoteUpdate() {
         updState = 1;
         updError = "";
         renderUpdateView();
         new Thread(() -> {
-            final org.json.JSONObject fj = fetchRemoteManifest();
-            final String ferr = (fj == null) ? "无法连接更新源，请检查网络后重试" : null;
+            final java.util.List<ReleaseInfo> list = fetchReleases();
             runOnUiThread(() -> {
-                if (fj != null) {
-                    updRemote = fj;
-                    updState = 2;
-                } else {
+                if (list.isEmpty()) {
                     updState = 4;
-                    updError = ferr == null ? "" : ferr;
+                    updError = "无法获取版本列表，请检查网络后重试";
+                } else {
+                    updReleases = list;
+                    updState = 2;
+                    autoPromptedVer = "";   // 手动扫描后允许重新提示
                 }
                 renderUpdateView();
             });
         }).start();
     }
+
 
     // ── 更新包缓存（原生安装器不会自动删除缓存 APK，故自行管理）──
 
@@ -1926,9 +2060,9 @@ public class MainActivity extends AppCompatActivity {
         return getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
     }
 
-    /** 指定版本的缓存安装包路径（按 versionCode 命名，便于复用与甄别） */
-    private File updateCacheFile(int versionCode) {
-        return new File(updateCacheDir(), "hyvq_update_" + versionCode + ".apk");
+    /** 指定版本的缓存安装包路径（按版本名命名，便于复用与甄别） */
+    private File updateCacheFileByVer(String ver) {
+        return new File(updateCacheDir(), "hyvq_update_v" + ver + ".apk");
     }
 
     /** 清理缓存安装包：keep 为 null 时全部清除，否则只保留 keep */
@@ -1975,8 +2109,8 @@ public class MainActivity extends AppCompatActivity {
 
     /** 更新入口：缓存命中则直接安装，否则带进度下载 */
     private void startUpdate(final String apkUrl, final String expectMd5, final long expectSize,
-                             final int versionCode, final android.app.Dialog dialog) {
-        final File target = updateCacheFile(versionCode);
+                             final String verName, final android.app.Dialog dialog) {
+        final File target = updateCacheFileByVer(verName);
         boolean hit = target.exists() && target.length() > 0
                 && (expectSize <= 0 || target.length() == expectSize);
         if (hit) {
