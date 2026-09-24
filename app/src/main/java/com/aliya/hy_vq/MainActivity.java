@@ -115,6 +115,8 @@ public class MainActivity extends AppCompatActivity {
     private org.json.JSONObject updRemote;
     /** 本机缓存中可安装的更新包（比当前版本新） */
     private File updCachedApk;
+    /** 已弹过更新提示的版本号：同一版本不在本次会话内重复打扰 */
+    private int autoPromptedCode = -1;
     /** 开源仓库地址（与 README / LICENSE 一致） */
     private static final String OPEN_SOURCE_URL = "https://github.com/haoyou999/HY_VQ";
     private static final int PAGE_SETTINGS = 3;
@@ -1786,15 +1788,89 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     updateUpdateStateLabel();
                 }
-                int rCode = fj.optInt("versionCode", 0);
-                String rName = fj.optString("versionName", "");
-                if (rCode > currentPkgCode()) {
-                    Toast.makeText(MainActivity.this,
-                            "发现新版本 v" + rName + "，可在「设置 → 软件更新」中更新",
-                            Toast.LENGTH_LONG).show();
+                if (fj.optInt("versionCode", 0) > currentPkgCode()) {
+                    showAutoUpdatePrompt(fj);
                 }
             });
         }).start();
+    }
+
+    /** 自动检查发现新版本时弹出提示，由用户决定是否更新 */
+    private void showAutoUpdatePrompt(final org.json.JSONObject j) {
+        final int rCode = j.optInt("versionCode", 0);
+        final String rName = j.optString("versionName", "?");
+        final String rApk = j.optString("apk", "");
+        final String rMd5 = j.optString("md5", "");
+        final long rSize = j.optLong("size", 0L);
+        final String rLog = j.optString("changelog", "");
+
+        if (rCode <= 0 || autoPromptedCode == rCode) return;   // 同一版本只提示一次
+        autoPromptedCode = rCode;
+
+        final File cached = updateCacheFile(rCode);
+        final boolean hasCache = cached.exists() && cached.length() > 0
+                && (rSize <= 0 || cached.length() == rSize);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "🎉 发现新版本"));
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tv.setLineSpacing(0, 1.4f);
+        tv.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        int pad = dp2(4);
+        tv.setPadding(pad, pad, pad, pad);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("v").append(rName).append("  (code ").append(rCode).append(")");
+        if (rSize > 0) sb.append("    ").append(fmtSize(rSize));
+        sb.append(System.lineSeparator()).append(System.lineSeparator());
+
+        // 更新日志只显示前若干条，完整内容可点「详情」进更新页查看
+        final int MAX_LINES = 6;
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        if (!rLog.isEmpty()) {
+            for (String ln : rLog.split(System.lineSeparator())) {
+                if (!ln.trim().isEmpty()) lines.add(ln);
+            }
+        }
+        if (lines.isEmpty()) {
+            sb.append("· 细节优化与问题修复");
+        } else {
+            for (int i = 0; i < lines.size() && i < MAX_LINES; i++) {
+                sb.append(lines.get(i)).append(System.lineSeparator());
+            }
+            if (lines.size() > MAX_LINES) {
+                sb.append("… 共 ").append(lines.size()).append(" 项，点「详情」查看全部");
+            }
+        }
+        if (hasCache) {
+            sb.append(System.lineSeparator()).append(System.lineSeparator())
+                    .append("📦 安装包已下载（").append(fmtSize(cached.length())).append("），可直接安装");
+        }
+        tv.setText(sb.toString());
+        box.addView(tv);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(this, box);
+        btns.addView(updateTextButton("稍后", v -> dialog.dismiss()));
+        btns.addView(updateTextButton("详情", v -> {
+            dialog.dismiss();
+            switchToUpdate();
+        }));
+        if (!rApk.isEmpty()) {
+            final String url = rApk.startsWith("http") ? rApk : REMOTE_UPD_BASE + rApk;
+            btns.addView(updateTextButton(hasCache ? "立即安装" : "立即更新", v -> {
+                dialog.dismiss();
+                startUpdate(url, rMd5, rSize, rCode, null);
+            }));
+        }
+        dialog.show();
     }
 
     /** 检查更新：拉取远程清单后刷新页面（结果全部体现在页面内容里） */
