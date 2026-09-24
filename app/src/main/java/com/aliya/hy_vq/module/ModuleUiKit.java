@@ -61,6 +61,11 @@ public final class ModuleUiKit {
      * 模块把自己的内容 View 传入即可。
      */
     public static Dialog glassDialog(Context context, View content) {
+        return glassDialog(context, content, true);
+    }
+
+    /** @param dismissOnOutside 点击面板外的模糊区域是否关闭弹窗（进度类弹窗传 false） */
+    public static Dialog glassDialog(Context context, View content, boolean dismissOnOutside) {
         Dialog dialog = new Dialog(context);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -89,7 +94,22 @@ public final class ModuleUiKit {
             window.setBackgroundDrawableResource(android.R.color.transparent);
             // 浮窗背景模糊（规范：浮窗必须带背景模糊）
             applyBlur(window, context);
+
+            // ⭐ 修复「点击弹窗外无法关闭」：
+            // applyBlur 为让模糊背景完整覆盖，会把窗口铺满全屏（MATCH_PARENT），
+            // 于是「弹窗以外的区域」实际上仍在 Dialog 窗口内 ——
+            // 系统只认窗口外的触摸，setCanceledOnTouchOutside 永远不会触发。
+            // 故此处在窗口根布局上显式补一次「点空白关闭」，并让内容面板拦截自身点击。
+            final View decor = window.getDecorView();
+            if (dismissOnOutside) {
+                decor.setClickable(true);
+                decor.setFocusable(true);
+                // Dialog 无公开的 isCancelable()，能否点外关闭由本参数在创建时决定
+                decor.setOnClickListener(v -> dialog.dismiss());
+            }
         }
+        // 内容面板拦截点击：点面板内部不应关闭（只有面板外的模糊区域才关闭）
+        root.setClickable(true);
         dialog.setCancelable(true);
         return dialog;
     }

@@ -357,9 +357,14 @@ public class FileManagerModule extends HyVqModule {
     private void buildNavOverlay() {
         navOverlay = new FrameLayout(ctx);
         navOverlay.setVisibility(View.GONE);
+        // ⭐ 防点击穿透：侧边栏展开时它必须是**唯一的触摸目标**，
+        // 否则点在遮罩/面板空白处的事件会落到底层文件列表上（表现为"误操作列表"）。
+        navOverlay.setClickable(true);
+        navOverlay.setFocusable(true);
         // 遮罩：浅色半透明黑（同外层 DrawerLayout scrimColor 0x33000000），点击关闭
         navScrim = new View(ctx);
         navScrim.setBackgroundColor(0x33000000);
+        navScrim.setClickable(true);
         navScrim.setOnClickListener(v -> closeNavSidebar());
         navOverlay.addView(navScrim, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -376,6 +381,7 @@ public class FileManagerModule extends HyVqModule {
         navPanel.setBackground(panelBg);
         int pad = dp(14);
         navPanel.setPadding(pad, pad, pad, pad);
+        navPanel.setClickable(true);   // 面板空白处拦住事件：既不穿透，也不误触关闭
         navPanelWidth = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.55); // 更窄：55%
         navOverlay.addView(navPanel, new FrameLayout.LayoutParams(
                 navPanelWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));

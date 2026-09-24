@@ -2334,7 +2334,8 @@ public class MainActivity extends AppCompatActivity {
         plp.topMargin = dp2(6);
         box.addView(pb, plp);
 
-        final android.app.Dialog pd = ModuleUiKit.glassDialog(this, box);
+        // 下载进度弹窗：不允许点击外部关闭（否则下载中途被误关）
+        final android.app.Dialog pd = ModuleUiKit.glassDialog(this, box, false);
         pd.setCancelable(false);
         pd.show();
 
