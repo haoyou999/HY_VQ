@@ -249,7 +249,38 @@
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
 
-        <!-- ══ 版权 ══ -->
+        
+        <!-- ══ 声明 ══ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"
+            android:text="声明"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
+            android:textColor="?attr/colorError" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorError"
+            app:cardBackgroundColor="?attr/colorErrorContainer">
+
+            <TextView
+                android:id="@+id/tv_about_disclaimer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="14dp"
+                android:lineSpacingExtra="4dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnErrorContainer" />
+        </com.google.android.material.card.MaterialCardView>
+
+<!-- ══ 版权 ══ -->
         <TextView
             android:id="@+id/tv_about_copyright"
             android:layout_width="match_parent"

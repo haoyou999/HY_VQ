@@ -370,11 +370,23 @@ public class MainActivity extends AppCompatActivity {
                     "AndroidX —— 基础支持库"
             }));
         }
+        TextView tvDisc = aboutView.findViewById(R.id.tv_about_disclaimer);
+        if (tvDisc != null) {
+            tvDisc.setText(String.join(System.lineSeparator(), new String[]{
+                    "本软件全部代码由 AI 智能体编写，人类作者仅提出需求与验收结果。",
+                    "",
+                    "AI 生成的代码不保证正确性、安全性、稳定性与适用性，可能存在未发现的缺陷、性能问题或安全隐患。",
+                    "",
+                    "涉及文件操作（含 Root 权限）与外部模块动态加载，使用前请自行审阅代码并备份重要数据。",
+                    "",
+                    "本软件按「现状」提供，不提供任何形式担保；因使用造成的任何损失由使用者自行承担。"
+            }));
+        }
         TextView tvCr = aboutView.findViewById(R.id.tv_about_copyright);
         if (tvCr != null) {
             tvCr.setText(String.join(System.lineSeparator(), new String[]{
-                    "© 2026 HY_VQ",
-                    "以 GNU GPL v3.0 协议开源",
+                    "© 2026 HY_VQ · AI 编写",
+                    "以 GNU GPL v3.0 协议开源，不提供任何担保",
                     "可自由使用、修改与再分发，衍生作品须采用同一协议"
             }));
         }
