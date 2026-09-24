@@ -4238,6 +4238,12 @@ public class FileManagerModule extends HyVqModule {
     }
 
 
+    /** 纯视频扩展名：用于播放器左右切换时筛选同目录文件 */
+    private static final java.util.Set<String> VIDEO_ONLY_EXTS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "mp4", "mkv", "avi", "mov", "wmv", "flv", "3gp", "webm", "ts", "m4v",
+                    "mpg", "mpeg", "rm", "rmvb", "vob", "f4v", "m2ts", "mts", "ogv", "mxf"));
+
     /** 纯音频扩展名：用弹窗播放器（原生 MediaPlayer），与视频分开处理 */
     private static final java.util.Set<String> AUDIO_ONLY_EXTS =
             new java.util.HashSet<>(java.util.Arrays.asList(
@@ -4260,15 +4266,37 @@ public class FileManagerModule extends HyVqModule {
                     "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "amr",
                     "aiff", "ape", "wv", "mid", "midi", "ac3", "dts", "mka", "ra", "au", "caf"));
 
-    /** 用内置播放器打开（音频/视频统一入口） */
+    /** 收集当前活动目录下同类型的可播放文件（供播放器左右切换）。
+     *  找不到时返回仅含自身的单元素列表，保证播放器始终有可用列表。 */
+    private java.util.ArrayList<String> collectPlayable(String curPath, boolean audioOnly) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        Pane p = active;
+        if (p != null && p.entries != null) {
+            for (FileEntry e : p.entries) {
+                if (e == null || e.isDir() || e.name == null) continue;
+                String ex = extOf(e.name);
+                boolean ok = audioOnly ? AUDIO_ONLY_EXTS.contains(ex) : VIDEO_ONLY_EXTS.contains(ex);
+                if (ok && e.path != null && !e.path.isEmpty()) out.add(e.path);
+            }
+        }
+        if (out.isEmpty() && curPath != null) out.add(curPath);
+        return out;
+    }
+
+    /** 用内置播放器打开（视频：全屏页 + 同目录左右切换） */
     private void openWithBuiltInPlayer(String pathOrUri, String name, boolean isUri) {
         try {
-            Intent i = new Intent(ctx, com.aliya.hy_vq.MediaPlayerActivity.class);
-            if (isUri) {
-                i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_URI, pathOrUri);
-            } else {
-                i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_PATH, pathOrUri);
+            java.util.ArrayList<String> list = collectPlayable(pathOrUri, false);
+            int idx = list.indexOf(pathOrUri);
+            if (idx < 0) {
+                list.add(0, pathOrUri);
+                idx = 0;
             }
+            Intent i = new Intent(ctx, com.aliya.hy_vq.MediaPlayerActivity.class);
+            i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_LIST,
+                    list.toArray(new String[0]));
+            i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_INDEX, idx);
+            i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_IS_URI, isUri);
             i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_TITLE, name);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             ctx.startActivity(i);
@@ -4292,8 +4320,14 @@ public class FileManagerModule extends HyVqModule {
             return;
         }
         if (AUDIO_ONLY_EXTS.contains(ext)) {
-            // 音频：弹窗式播放（原生 MediaPlayer，无需 Surface）
-            showAudioPlayerDialog(path, name, false);
+            // 音频：弹窗式播放（原生 MediaPlayer，无需 Surface）+ 同目录左右切换
+            java.util.ArrayList<String> list = collectPlayable(path, true);
+            int idx = list.indexOf(path);
+            if (idx < 0) {
+                list.add(0, path);
+                idx = 0;
+            }
+            showAudioPlayerDialog(list, idx, false);
             return;
         }
         if (MEDIA_EXTS.contains(ext)) {
@@ -4570,28 +4604,42 @@ public class FileManagerModule extends HyVqModule {
     private android.media.MediaPlayer audioPlayer;
     private android.os.Handler audioTicker;
 
-    /** 音频播放弹窗：用**原生 MediaPlayer**（不需要 Surface，故必须用弹窗而非 VideoView 全屏页）
-     *  —— 此前用 VideoView 播音频时把它设为 INVISIBLE，导致 Surface 失效、音频无法输出。 */
-    private void showAudioPlayerDialog(final String pathOrUri, final String name, final boolean isUri) {
+    /** 音频播放弹窗：原生 MediaPlayer（不依赖 Surface）+ **同目录左右切换**。
+     *  UI 要点：控制键为**图标**（非中文）且**居中**排列（上一首 / 播放暂停 / 下一首）。 */
+    private void showAudioPlayerDialog(final java.util.ArrayList<String> playlist,
+                                       int startIndex, final boolean isUri) {
         releaseAudioPlayer();
+        if (playlist == null || playlist.isEmpty()) {
+            ModuleUiKit.toast(ctx, "无可用音频");
+            return;
+        }
+        final int[] idx = {Math.max(0, Math.min(startIndex, playlist.size() - 1))};
+        final boolean[] switching = {false};
 
-        final LinearLayout box = new LinearLayout(ctx);
+        LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
         box.addView(ModuleUiKit.sectionHeader(ctx, "🎵 音频播放"));
 
-        TextView tvName = new TextView(ctx);
-        tvName.setText(name);
+        int p4 = dp(4);
+
+        final TextView tvCounter = new TextView(ctx);
+        tvCounter.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvCounter.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        tvCounter.setPadding(p4, 0, p4, dp(4));
+        box.addView(tvCounter);
+
+        final TextView tvName = new TextView(ctx);
         tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tvName.setTypeface(null, android.graphics.Typeface.BOLD);
         tvName.setMaxLines(2);
         tvName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         tvName.setTextColor(ModuleUiKit.color(ctx,
                 com.google.android.material.R.attr.colorOnSurface));
-        int p4 = dp(4);
         tvName.setPadding(p4, 0, p4, dp(4));
         box.addView(tvName);
 
         final TextView tvState = new TextView(ctx);
-        tvState.setText("正在准备…");
         tvState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         tvState.setTextColor(ModuleUiKit.color(ctx,
                 com.google.android.material.R.attr.colorOnSurfaceVariant));
@@ -4602,13 +4650,11 @@ public class FileManagerModule extends HyVqModule {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         final TextView tvPos = new TextView(ctx);
-        tvPos.setText("00:00");
         tvPos.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         tvPos.setTextColor(ModuleUiKit.color(ctx,
                 com.google.android.material.R.attr.colorOnSurfaceVariant));
         final SeekBar seek = new SeekBar(ctx);
         final TextView tvDur = new TextView(ctx);
-        tvDur.setText("00:00");
         tvDur.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         tvDur.setTextColor(ModuleUiKit.color(ctx,
                 com.google.android.material.R.attr.colorOnSurfaceVariant));
@@ -4618,25 +4664,56 @@ public class FileManagerModule extends HyVqModule {
         row.addView(tvDur);
         box.addView(row);
 
-        LinearLayout btns = new LinearLayout(ctx);
-        btns.setOrientation(LinearLayout.HORIZONTAL);
-        btns.setGravity(android.view.Gravity.END);
-        final TextView btnPlay = new TextView(ctx);
-        btnPlay.setText("暂停");
-        btnPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        btnPlay.setTypeface(null, android.graphics.Typeface.BOLD);
-        btnPlay.setTextColor(ModuleUiKit.color(ctx,
-                com.google.android.material.R.attr.colorPrimary));
-        btnPlay.setPadding(dp(12), dp(10), dp(12), dp(10));
+        // ── 控制键：图标 + 居中 ──
+        LinearLayout ctrl = new LinearLayout(ctx);
+        ctrl.setOrientation(LinearLayout.HORIZONTAL);
+        ctrl.setGravity(android.view.Gravity.CENTER);
+        ctrl.setPadding(0, dp(10), 0, dp(4));
+
+        int iconSize = dp(34);
+        int iconPad = dp(7);
+        int tint = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary);
+        int tintDim = ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant);
+
+        final ImageView btnPrev = new ImageView(ctx);
+        btnPrev.setImageResource(R.drawable.ic_skip_previous);
+        btnPrev.setColorFilter(tintDim);
+        btnPrev.setPadding(iconPad, iconPad, iconPad, iconPad);
+        btnPrev.setContentDescription("上一首");
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(iconSize, iconSize);
+        ilp.rightMargin = dp(18);
+        ctrl.addView(btnPrev, ilp);
+
+        final ImageView btnPlay = new ImageView(ctx);
+        btnPlay.setImageResource(R.drawable.ic_pause);
+        btnPlay.setColorFilter(tint);
+        btnPlay.setPadding(iconPad, iconPad, iconPad, iconPad);
+        btnPlay.setContentDescription("播放/暂停");
+        ctrl.addView(btnPlay, new LinearLayout.LayoutParams(iconSize, iconSize));
+
+        final ImageView btnNext = new ImageView(ctx);
+        btnNext.setImageResource(R.drawable.ic_skip_next);
+        btnNext.setColorFilter(tintDim);
+        btnNext.setPadding(iconPad, iconPad, iconPad, iconPad);
+        btnNext.setContentDescription("下一首");
+        LinearLayout.LayoutParams ilp2 = new LinearLayout.LayoutParams(iconSize, iconSize);
+        ilp2.leftMargin = dp(18);
+        ctrl.addView(btnNext, ilp2);
+        box.addView(ctrl);
+
+        LinearLayout foot = new LinearLayout(ctx);
+        foot.setOrientation(LinearLayout.HORIZONTAL);
+        foot.setGravity(android.view.Gravity.END);
         TextView btnClose = new TextView(ctx);
         btnClose.setText("关闭");
         btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         btnClose.setTextColor(ModuleUiKit.color(ctx,
                 com.google.android.material.R.attr.colorOnSurfaceVariant));
-        btnClose.setPadding(dp(12), dp(10), p4, dp(10));
-        btns.addView(btnPlay);
-        btns.addView(btnClose);
-        box.addView(btns);
+        btnClose.setPadding(dp(12), dp(8), p4, dp(8));
+        foot.addView(btnClose);
+        box.addView(foot);
 
         final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
         dialog.setOnDismissListener(d -> releaseAudioPlayer());
@@ -4657,76 +4734,132 @@ public class FileManagerModule extends HyVqModule {
             }
         });
 
+        // ── 播放指定索引（供首次与左右切换复用）──
+        final Runnable playCurrent = () -> {
+            if (switching[0]) return;
+            switching[0] = true;
+            releaseAudioPlayer();
+            final String path = playlist.get(idx[0]);
+            String nm = path;
+            int slash = path.lastIndexOf('/');
+            if (slash >= 0 && slash < path.length() - 1) nm = path.substring(slash + 1);
+            final String fileName = nm;
+            tvCounter.setText((idx[0] + 1) + " / " + playlist.size());
+            tvName.setText(fileName);
+            tvState.setText("正在准备…");
+            tvPos.setText("00:00");
+            tvDur.setText("00:00");
+            seek.setProgress(0);
+            seek.setMax(0);
+            btnPlay.setImageResource(R.drawable.ic_pause);
+            btnPrev.setColorFilter(idx[0] > 0 ? tintDim : tintDim);
+            btnNext.setColorFilter(idx[0] < playlist.size() - 1 ? tintDim : tintDim);
+
+            new Thread(() -> {
+                try {
+                    android.media.MediaPlayer mp = new android.media.MediaPlayer();
+                    if (isUri) {
+                        mp.setDataSource(ctx, Uri.parse(path));
+                    } else {
+                        mp.setDataSource(path);
+                    }
+                    mp.prepare();
+                    final int dur = mp.getDuration();
+                    if (audioPlayer != null) {          // 期间又切了 → 丢弃本次
+                        try {
+                            mp.release();
+                        } catch (Throwable ignored) {
+                        }
+                        switching[0] = false;
+                        return;
+                    }
+                    audioPlayer = mp;
+                    mp.start();
+                    runOnUi(() -> {
+                        tvState.setText(isUri ? "播放中（SAF）" : "播放中");
+                        tvDur.setText(fmtMs(dur));
+                        seek.setMax(dur > 0 ? dur : 0);
+                        startAudioTicker(seek, tvPos, btnPlay);
+                        switching[0] = false;
+                    });
+                } catch (Throwable t) {
+                    runOnUi(() -> {
+                        tvState.setText("无法播放：" + t.getMessage());
+                        switching[0] = false;
+                    });
+                }
+            }).start();
+        };
+
         btnPlay.setOnClickListener(v -> {
-            if (audioPlayer == null) return;
+            if (audioPlayer == null) {
+                playCurrent.run();
+                return;
+            }
             try {
                 if (audioPlayer.isPlaying()) {
                     audioPlayer.pause();
-                    btnPlay.setText("播放");
+                    btnPlay.setImageResource(R.drawable.ic_play);
                 } else {
                     audioPlayer.start();
-                    btnPlay.setText("暂停");
+                    btnPlay.setImageResource(R.drawable.ic_pause);
                 }
             } catch (Throwable ignored) {
             }
         });
+        btnPrev.setOnClickListener(v -> {
+            if (idx[0] <= 0) {
+                ModuleUiKit.toast(ctx, "已经是第一个");
+                return;
+            }
+            idx[0]--;
+            playCurrent.run();
+        });
+        btnNext.setOnClickListener(v -> {
+            if (idx[0] >= playlist.size() - 1) {
+                ModuleUiKit.toast(ctx, "已经是最后一个");
+                return;
+            }
+            idx[0]++;
+            playCurrent.run();
+        });
         btnClose.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
-
-        // 后台准备并播放（prepare 会阻塞，不能放主线程）
-        new Thread(() -> {
-            try {
-                android.media.MediaPlayer mp = new android.media.MediaPlayer();
-                if (isUri) {
-                    mp.setDataSource(ctx, Uri.parse(pathOrUri));
-                } else {
-                    mp.setDataSource(pathOrUri);
-                }
-                mp.prepare();
-                final int dur = mp.getDuration();
-                audioPlayer = mp;
-                mp.start();
-                runOnUi(() -> {
-                    tvState.setText(isUri ? "SAF 文件播放中" : "播放中");
-                    tvDur.setText(fmtMs(dur));
-                    seek.setMax(dur > 0 ? dur : 0);
-                    startAudioTicker(seek, tvPos, btnPlay);
-                });
-            } catch (Throwable t) {
-                runOnUi(() -> {
-                    tvState.setText("无法播放：" + t.getMessage());
-                    ModuleUiKit.toast(ctx, "该音频格式可能不被系统解码器支持");
-                });
-            }
-        }).start();
+        playCurrent.run();
     }
+
+
 
     private void runOnUi(Runnable r) {
         if (hostActivity != null) hostActivity.runOnUiThread(r);
         else handler.post(r);
     }
 
-    /** 每 500ms 刷新进度（弹窗关闭后自动停止） */
-    private void startAudioTicker(final SeekBar seek, final TextView tvPos, final TextView btnPlay) {
-        if (audioTicker == null) audioTicker = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** 每 500ms 刷新进度与按钮图标（弹窗关闭后自动停止） */
+    private void startAudioTicker(final SeekBar seek, final TextView tvPos,
+                                  final ImageView btnPlay) {
+        if (audioTicker == null) {
+            audioTicker = new android.os.Handler(android.os.Looper.getMainLooper());
+        }
         audioTicker.removeCallbacksAndMessages(null);
         audioTicker.post(new Runnable() {
             @Override public void run() {
                 if (audioPlayer == null) return;
                 try {
-                    if (audioPlayer.isPlaying()) {
-                        int pos = audioPlayer.getCurrentPosition();
-                        seek.setProgress(pos);
-                        tvPos.setText(fmtMs(pos));
-                        btnPlay.setText("暂停");
-                    }
+                    int pos = audioPlayer.getCurrentPosition();
+                    seek.setProgress(pos);
+                    tvPos.setText(fmtMs(pos));
+                    // 图标随播放状态切换（不使用中文文字）
+                    btnPlay.setImageResource(audioPlayer.isPlaying()
+                            ? R.drawable.ic_pause : R.drawable.ic_play);
                 } catch (Throwable ignored) {
                 }
                 audioTicker.postDelayed(this, 500);
             }
         });
     }
+
 
     private void releaseAudioPlayer() {
         if (audioTicker != null) audioTicker.removeCallbacksAndMessages(null);
@@ -4838,7 +4971,13 @@ public class FileManagerModule extends HyVqModule {
                 return;
             }
             if (AUDIO_ONLY_EXTS.contains(safExt)) {
-                showAudioPlayerDialog(e.path, e.name, true);   // 音频：弹窗
+                java.util.ArrayList<String> safl = collectPlayable(e.path, true);
+                int safIdx = safl.indexOf(e.path);
+                if (safIdx < 0) {
+                    safl.add(0, e.path);
+                    safIdx = 0;
+                }
+                showAudioPlayerDialog(safl, safIdx, true);   // 音频：弹窗 + 左右切换
                 return;
             }
             if (MEDIA_EXTS.contains(safExt)) {
