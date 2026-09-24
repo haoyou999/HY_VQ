@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
+import android.widget.SeekBar;
 import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
@@ -3730,15 +3731,15 @@ public class FileManagerModule extends HyVqModule {
         sizeTv.setText("字号：" + (int) editorFontSizePref() + " sp");
         sizeTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         box.addView(sizeTv);
-        final android.widget.SeekBar sizeSb = new android.widget.SeekBar(ctx);
+        final SeekBar sizeSb = new SeekBar(ctx);
         sizeSb.setMax(14);
         sizeSb.setProgress((int) editorFontSizePref() - 10);
-        sizeSb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(android.widget.SeekBar sb, int progress, boolean fromUser) {
+        sizeSb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 sizeTv.setText("字号：" + (progress + 10) + " sp");
             }
-            @Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
-            @Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
         });
         box.addView(sizeSb);
         final androidx.appcompat.widget.SwitchCompat monoSw = new androidx.appcompat.widget.SwitchCompat(ctx);
@@ -3749,15 +3750,15 @@ public class FileManagerModule extends HyVqModule {
         tabTv.setText("Tab 宽度：" + editorTabWidthPref() + " 空格");
         tabTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         box.addView(tabTv);
-        final android.widget.SeekBar tabSb = new android.widget.SeekBar(ctx);
+        final SeekBar tabSb = new SeekBar(ctx);
         tabSb.setMax(6);
         tabSb.setProgress(editorTabWidthPref() - 2);
-        tabSb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(android.widget.SeekBar sb, int progress, boolean fromUser) {
+        tabSb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 tabTv.setText("Tab 宽度：" + (progress + 2) + " 空格");
             }
-            @Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
-            @Override public void onStopTrackingTouch(android.widget.SeekBar sb) {}
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
         });
         box.addView(tabSb);
         TextView themeTitle = new TextView(ctx);
@@ -4237,6 +4238,12 @@ public class FileManagerModule extends HyVqModule {
     }
 
 
+    /** 纯音频扩展名：用弹窗播放器（原生 MediaPlayer），与视频分开处理 */
+    private static final java.util.Set<String> AUDIO_ONLY_EXTS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "amr",
+                    "aiff", "ape", "wv", "mid", "midi", "ac3", "dts", "mka", "ra", "au", "caf"));
+
     /** 图片扩展名：命中时内置「图片查看器」可用 */
     private static final java.util.Set<String> IMAGE_EXTS =
             new java.util.HashSet<>(java.util.Arrays.asList(
@@ -4284,8 +4291,13 @@ public class FileManagerModule extends HyVqModule {
             openImageViewer(path, name, false);
             return;
         }
+        if (AUDIO_ONLY_EXTS.contains(ext)) {
+            // 音频：弹窗式播放（原生 MediaPlayer，无需 Surface）
+            showAudioPlayerDialog(path, name, false);
+            return;
+        }
         if (MEDIA_EXTS.contains(ext)) {
-            openWithBuiltInPlayer(path, name, false);
+            openWithBuiltInPlayer(path, name, false);   // 视频：全屏 VideoView
             return;
         }
         if (isTextFile(name)) {
@@ -4554,6 +4566,189 @@ public class FileManagerModule extends HyVqModule {
         return tv;
     }
 
+    /** 当前音频播放弹窗的播放器（同一时刻只允许一个；关窗即释放） */
+    private android.media.MediaPlayer audioPlayer;
+    private android.os.Handler audioTicker;
+
+    /** 音频播放弹窗：用**原生 MediaPlayer**（不需要 Surface，故必须用弹窗而非 VideoView 全屏页）
+     *  —— 此前用 VideoView 播音频时把它设为 INVISIBLE，导致 Surface 失效、音频无法输出。 */
+    private void showAudioPlayerDialog(final String pathOrUri, final String name, final boolean isUri) {
+        releaseAudioPlayer();
+
+        final LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "🎵 音频播放"));
+
+        TextView tvName = new TextView(ctx);
+        tvName.setText(name);
+        tvName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tvName.setMaxLines(2);
+        tvName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        tvName.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface));
+        int p4 = dp(4);
+        tvName.setPadding(p4, 0, p4, dp(4));
+        box.addView(tvName);
+
+        final TextView tvState = new TextView(ctx);
+        tvState.setText("正在准备…");
+        tvState.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvState.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        tvState.setPadding(p4, 0, p4, dp(10));
+        box.addView(tvState);
+
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        final TextView tvPos = new TextView(ctx);
+        tvPos.setText("00:00");
+        tvPos.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvPos.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        final SeekBar seek = new SeekBar(ctx);
+        final TextView tvDur = new TextView(ctx);
+        tvDur.setText("00:00");
+        tvDur.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvDur.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        row.addView(tvPos);
+        row.addView(seek, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(tvDur);
+        box.addView(row);
+
+        LinearLayout btns = new LinearLayout(ctx);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(android.view.Gravity.END);
+        final TextView btnPlay = new TextView(ctx);
+        btnPlay.setText("暂停");
+        btnPlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btnPlay.setTypeface(null, android.graphics.Typeface.BOLD);
+        btnPlay.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary));
+        btnPlay.setPadding(dp(12), dp(10), dp(12), dp(10));
+        TextView btnClose = new TextView(ctx);
+        btnClose.setText("关闭");
+        btnClose.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btnClose.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        btnClose.setPadding(dp(12), dp(10), p4, dp(10));
+        btns.addView(btnPlay);
+        btns.addView(btnClose);
+        box.addView(btns);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
+        dialog.setOnDismissListener(d -> releaseAudioPlayer());
+
+        seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) tvPos.setText(fmtMs(progress));
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) {
+            }
+            @Override public void onStopTrackingTouch(SeekBar sb) {
+                if (audioPlayer != null) {
+                    try {
+                        audioPlayer.seekTo(sb.getProgress());
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        });
+
+        btnPlay.setOnClickListener(v -> {
+            if (audioPlayer == null) return;
+            try {
+                if (audioPlayer.isPlaying()) {
+                    audioPlayer.pause();
+                    btnPlay.setText("播放");
+                } else {
+                    audioPlayer.start();
+                    btnPlay.setText("暂停");
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
+
+        // 后台准备并播放（prepare 会阻塞，不能放主线程）
+        new Thread(() -> {
+            try {
+                android.media.MediaPlayer mp = new android.media.MediaPlayer();
+                if (isUri) {
+                    mp.setDataSource(ctx, Uri.parse(pathOrUri));
+                } else {
+                    mp.setDataSource(pathOrUri);
+                }
+                mp.prepare();
+                final int dur = mp.getDuration();
+                audioPlayer = mp;
+                mp.start();
+                runOnUi(() -> {
+                    tvState.setText(isUri ? "SAF 文件播放中" : "播放中");
+                    tvDur.setText(fmtMs(dur));
+                    seek.setMax(dur > 0 ? dur : 0);
+                    startAudioTicker(seek, tvPos, btnPlay);
+                });
+            } catch (Throwable t) {
+                runOnUi(() -> {
+                    tvState.setText("无法播放：" + t.getMessage());
+                    ModuleUiKit.toast(ctx, "该音频格式可能不被系统解码器支持");
+                });
+            }
+        }).start();
+    }
+
+    private void runOnUi(Runnable r) {
+        if (hostActivity != null) hostActivity.runOnUiThread(r);
+        else handler.post(r);
+    }
+
+    /** 每 500ms 刷新进度（弹窗关闭后自动停止） */
+    private void startAudioTicker(final SeekBar seek, final TextView tvPos, final TextView btnPlay) {
+        if (audioTicker == null) audioTicker = new android.os.Handler(android.os.Looper.getMainLooper());
+        audioTicker.removeCallbacksAndMessages(null);
+        audioTicker.post(new Runnable() {
+            @Override public void run() {
+                if (audioPlayer == null) return;
+                try {
+                    if (audioPlayer.isPlaying()) {
+                        int pos = audioPlayer.getCurrentPosition();
+                        seek.setProgress(pos);
+                        tvPos.setText(fmtMs(pos));
+                        btnPlay.setText("暂停");
+                    }
+                } catch (Throwable ignored) {
+                }
+                audioTicker.postDelayed(this, 500);
+            }
+        });
+    }
+
+    private void releaseAudioPlayer() {
+        if (audioTicker != null) audioTicker.removeCallbacksAndMessages(null);
+        if (audioPlayer != null) {
+            try {
+                audioPlayer.stop();
+            } catch (Throwable ignored) {
+            }
+            try {
+                audioPlayer.release();
+            } catch (Throwable ignored) {
+            }
+            audioPlayer = null;
+        }
+    }
+
+    private String fmtMs(int ms) {
+        if (ms < 0) ms = 0;
+        int s = ms / 1000;
+        return String.format(java.util.Locale.CHINA, "%02d:%02d", s / 60, s % 60);
+    }
+
     /** 内置图片查看器 */
     private void openImageViewer(String pathOrUri, String name, boolean isUri) {
         try {
@@ -4642,8 +4837,12 @@ public class FileManagerModule extends HyVqModule {
                 openImageViewer(e.path, e.name, true);
                 return;
             }
+            if (AUDIO_ONLY_EXTS.contains(safExt)) {
+                showAudioPlayerDialog(e.path, e.name, true);   // 音频：弹窗
+                return;
+            }
             if (MEDIA_EXTS.contains(safExt)) {
-                openWithBuiltInPlayer(e.path, e.name, true);
+                openWithBuiltInPlayer(e.path, e.name, true);   // 视频：全屏页
                 return;
             }
             showOpenWithDialog(e.path, e.name, true);
