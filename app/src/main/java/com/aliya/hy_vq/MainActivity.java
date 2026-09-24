@@ -848,6 +848,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
+        // 从其他页面/后台返回：让文件管理在下次加载时恢复原滚动位置
+        if (fileManager != null) fileManager.markReturnToForeground();
+
         super.onResume();
         moduleRegistry.notifyResume();
     }

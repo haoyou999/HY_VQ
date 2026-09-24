@@ -8,6 +8,7 @@ import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.VideoView;
@@ -108,6 +109,8 @@ public class MediaPlayerActivity extends Activity {
         btnPlay.setOnClickListener(v -> togglePlay());
         btnPrev.setOnClickListener(v -> step(-1));
         btnNext.setOnClickListener(v -> step(1));
+        ImageView btnList = findViewById(R.id.btn_player_list);
+        if (btnList != null) btnList.setOnClickListener(v -> showPlaylistPicker());
 
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
@@ -134,8 +137,8 @@ public class MediaPlayerActivity extends Activity {
         });
         videoView.setOnCompletionListener(mp -> {
             updatePlayIcon(false);
-            // 播完自动切下一个；已是最后一个则停在结尾
-            if (idx < playlist.length - 1) step(1);
+            // 循环列表：播完自动下一个，最后一个播完回到第一个
+            playAt(idx < playlist.length - 1 ? idx + 1 : 0);
         });
         videoView.setOnErrorListener((mp, what, extra) -> {
             tvDur.setText("无法播放");
@@ -186,16 +189,52 @@ public class MediaPlayerActivity extends Activity {
         }
     }
 
+    /** 左下角「选择文件」：列出当前播放列表（当前目录的音视频文件），点选即切换播放 */
+    private void showPlaylistPicker() {
+        if (playlist == null || playlist.length == 0) return;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "播放列表（" + playlist.length + "）"));
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        sc.addView(col);
+        android.widget.LinearLayout.LayoutParams slp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                (int) (getResources().getDisplayMetrics().density * 300));
+        box.addView(sc, slp);
+
+        final android.app.Dialog d = ModuleUiKit.glassDialog(this, box);
+        int primary = ModuleUiKit.color(this, com.google.android.material.R.attr.colorPrimary);
+        int normal = ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface);
+        int pad = (int) (getResources().getDisplayMetrics().density * 10);
+
+        for (int i = 0; i < playlist.length; i++) {
+            final int index = i;
+            TextView tv = new TextView(this);
+            tv.setText((i + 1) + ".  " + baseName(playlist[i]));
+            tv.setTextSize(13);
+            tv.setPadding(pad, pad, pad, pad);
+            tv.setMaxLines(1);
+            tv.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            tv.setTextColor(i == idx ? primary : normal);
+            if (i == idx) tv.setTypeface(null, android.graphics.Typeface.BOLD);
+            tv.setOnClickListener(v -> {
+                d.dismiss();
+                playAt(index);
+            });
+            col.addView(tv);
+        }
+        d.show();
+    }
+
+    /** 左右切换（循环）：首尾相接，不做越界提示打断 */
     private void step(int delta) {
+        if (playlist == null || playlist.length == 0) return;
         int n = idx + delta;
-        if (n < 0) {
-            ModuleUiKit.toast(this, "已经是第一个");
-            return;
-        }
-        if (n >= playlist.length) {
-            ModuleUiKit.toast(this, "已经是最后一个");
-            return;
-        }
+        if (n < 0) n = playlist.length - 1;
+        if (n >= playlist.length) n = 0;
         playAt(n);
     }
 

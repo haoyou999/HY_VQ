@@ -226,6 +226,10 @@ public class FileManagerModule extends HyVqModule {
     private static FileManagerModule activeInstance;
     /** 授权列表加载诊断（错误可见性：列表空且异常时 toast 真实原因） */
     private String mountLoadError;
+
+    /** 下次 reload 是否恢复滚动位置：仅「切到其他页面/后台后返回」时置 true。
+     *  目录之间的普通切换不恢复（避免用户莫名其妙的滚动跳动）。 */
+    private boolean restoreScrollOnLoad = false;
     /** SAF 系统文件选择器授权请求码 */
     private static final int REQ_SAF_MOUNT = 1005;
     private int sortMode = SORT_NAME;
@@ -688,7 +692,36 @@ public class FileManagerModule extends HyVqModule {
         });
         addNavTab("网络", R.drawable.ic_network, v -> showNetworkMenu(v));
         addNavTab("更多", R.drawable.ic_more_vert, v -> showMoreMenu(v));
+        addNewButtonToNav();
+        // 底部栏整体淡入 + 轻微上移（平滑过渡，避免生硬出现）
+        bottomNav.setAlpha(0f);
+        bottomNav.setTranslationY(dp(10));
+        bottomNav.animate().alpha(1f).translationY(0f).setDuration(220).start();
         return bottomNav;
+    }
+
+    /** 底部栏内置的「新建」按钮：圆形主题色图标，替代原右下角悬浮 FAB（那个会挡剪贴板） */
+    private void addNewButtonToNav() {
+        if (bottomNav == null) return;
+        ImageView add = new ImageView(ctx);
+        add.setImageResource(R.drawable.ic_add);
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gd.setColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimaryContainer));
+        add.setBackground(gd);
+        int sz = dp(34);
+        add.setPadding(dp(8), dp(8), dp(8), dp(8));
+        add.setColorFilter(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnPrimaryContainer));
+        add.setContentDescription("新建");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sz, sz);
+        lp.leftMargin = dp(4);
+        add.setOnClickListener(v -> animatePress(add, () -> {
+            // 以自身为锚点弹出新建菜单（底部栏内按钮同样以底部栏为参照弹出）
+            showNewMenu(bottomNav != null ? bottomNav : add);
+        }));
+        bottomNav.addView(add, lp);
     }
 
     /** 添加一个导航 Tab：图标 + 文字（垂直排列，点击回调）；navTabs 记录引用供高亮切换 */
@@ -787,12 +820,24 @@ public class FileManagerModule extends HyVqModule {
         fabNew.setPadding(dp(14), dp(14), dp(14), dp(14));
         fabNew.setColorFilter(ModuleUiKit.color(ctx, com.google.android.material.R.attr.colorOnPrimaryContainer));
         fabNew.setElevation(dp(6));
-        fabNew.setOnClickListener(v -> showNewMenu(v));
-        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(s, s);
-        flp.gravity = Gravity.END | Gravity.BOTTOM;
-        // ⭐10 悬浮在底部导航栏上方（底部导航约 50dp 高，FAB 底边抬高到 72dp 处）
-        flp.setMargins(0, 0, dp(16), dp(72));
-        rootContainer.addView(fabNew, flp);
+        fabNew.setOnClickListener(v -> {
+            animatePress(fabNew, () -> showNewMenu(fabNew));
+        });
+        // ⭐ 用户反馈：右下角悬浮加号会挡住剪贴板操作栏。
+        // 改为**内置到底部导航栏**（见 buildBottomNav 的 addNewButton），此处不再挂到 rootContainer。
+        fabNew.setVisibility(View.GONE);
+    }
+
+    /** 点击缩放反馈动画（按下缩小 → 回弹后执行动作），用于按钮的平滑过渡 */
+    private void animatePress(final View v, final Runnable then) {
+        if (v == null) {
+            if (then != null) then.run();
+            return;
+        }
+        v.animate().scaleX(0.86f).scaleY(0.86f).setDuration(90)
+                .withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(140)
+                        .withEndAction(then).start())
+                .start();
     }
 
     // ── 活跃窗格与交互 ──
@@ -926,16 +971,19 @@ public class FileManagerModule extends HyVqModule {
     private void reload(Pane p) {
         if (p == null || p.path == null) return;
         persistState(); // 目录切换即落盘（下次启动回到这里）
-        // ⭐8 目录滚动位置记忆（参考 MaterialFiles FileListFragment）：离开当前目录前，
-        // 把 RecyclerView 布局状态（含像素偏移，比 findFirstVisibleItemPosition 更精确）
-        // 按路径缓存；切换回来时 onRestoreInstanceState 恢复，退出再进入仍在原位置
+        // 滚动位置记忆（参考 MaterialFiles）：离开目录前缓存布局状态，**仅在特定场景恢复**。
+        // ⭐ 用户反馈：目录之间随便点一下也恢复旧位置，会让人莫名"上滑"。
+        //   故改为：只有「切到别处（如设置）再返回」才回到原位置；
+        //   同一次浏览中的目录切换一律**从顶部开始**。
         if (p.list != null && p.list.getLayoutManager() != null && p.lastLoadedPath != null) {
             try {
                 p.scrollStateByDir.put(p.lastLoadedPath, p.list.getLayoutManager().onSaveInstanceState());
             } catch (Throwable ignored) {
             }
         }
-        final android.os.Parcelable restoreState = p.scrollStateByDir.get(p.path);
+        final android.os.Parcelable restoreState = restoreScrollOnLoad
+                ? p.scrollStateByDir.get(p.path) : null;
+        restoreScrollOnLoad = false;   // 用后即清，避免影响后续普通目录切换
         p.lastLoadedPath = p.path;
         p.selected.clear();
         if (p == active) exitMultiMode();
@@ -4266,6 +4314,11 @@ public class FileManagerModule extends HyVqModule {
                     "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "amr",
                     "aiff", "ape", "wv", "mid", "midi", "ac3", "dts", "mka", "ra", "au", "caf"));
 
+    /** 由宿主在「从其他页面（如设置）或后台返回」时调用：下次加载恢复原滚动位置 */
+    public void markReturnToForeground() {
+        restoreScrollOnLoad = true;
+    }
+
     /** 收集当前活动目录下同类型的可播放文件（供播放器左右切换）。
      *  找不到时返回仅含自身的单元素列表，保证播放器始终有可用列表。 */
     private java.util.ArrayList<String> collectPlayable(String curPath, boolean audioOnly) {
@@ -4664,11 +4717,17 @@ public class FileManagerModule extends HyVqModule {
         row.addView(tvDur);
         box.addView(row);
 
-        // ── 控制键：图标 + 居中 ──
+        // ── 控制区：三键**整体居中**；左下角另放「选择文件」按钮 ──
+        android.widget.FrameLayout ctrlWrap = new android.widget.FrameLayout(ctx);
+        ctrlWrap.setPadding(0, dp(10), 0, dp(4));
         LinearLayout ctrl = new LinearLayout(ctx);
         ctrl.setOrientation(LinearLayout.HORIZONTAL);
         ctrl.setGravity(android.view.Gravity.CENTER);
-        ctrl.setPadding(0, dp(10), 0, dp(4));
+        android.widget.FrameLayout.LayoutParams cwlp = new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT);
+        cwlp.gravity = android.view.Gravity.CENTER;
+        ctrlWrap.addView(ctrl, cwlp);
 
         int iconSize = dp(34);
         int iconPad = dp(7);
@@ -4701,7 +4760,17 @@ public class FileManagerModule extends HyVqModule {
         LinearLayout.LayoutParams ilp2 = new LinearLayout.LayoutParams(iconSize, iconSize);
         ilp2.leftMargin = dp(18);
         ctrl.addView(btnNext, ilp2);
-        box.addView(ctrl);
+
+        final ImageView btnList = new ImageView(ctx);
+        btnList.setImageResource(R.drawable.ic_menu);
+        btnList.setColorFilter(tintDim);
+        btnList.setPadding(iconPad, iconPad, iconPad, iconPad);
+        btnList.setContentDescription("选择文件");
+        android.widget.FrameLayout.LayoutParams llp = new android.widget.FrameLayout.LayoutParams(
+                iconSize, iconSize);
+        llp.gravity = android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL;
+        ctrlWrap.addView(btnList, llp);
+        box.addView(ctrlWrap);   // 监听在 playCurrent 定义之后再绑定（Java 需先声明后使用）
 
         LinearLayout foot = new LinearLayout(ctx);
         foot.setOrientation(LinearLayout.HORIZONTAL);
@@ -4735,7 +4804,9 @@ public class FileManagerModule extends HyVqModule {
         });
 
         // ── 播放指定索引（供首次与左右切换复用）──
-        final Runnable playCurrent = () -> {
+        // 用单元素数组打破「lambda 自引用」限制（Java 不允许 lambda 引用正在初始化的自身变量）
+        final Runnable[] playRef = new Runnable[1];
+        playRef[0] = () -> {
             if (switching[0]) return;
             switching[0] = true;
             releaseAudioPlayer();
@@ -4773,6 +4844,11 @@ public class FileManagerModule extends HyVqModule {
                         switching[0] = false;
                         return;
                     }
+                    mp.setOnCompletionListener(m -> runOnUi(() -> {
+                        // 循环列表：播完自动下一个，最后一个回到第一个
+                        idx[0] = (idx[0] < playlist.size() - 1) ? idx[0] + 1 : 0;
+                        playRef[0].run();
+                    }));
                     audioPlayer = mp;
                     mp.start();
                     runOnUi(() -> {
@@ -4790,7 +4866,10 @@ public class FileManagerModule extends HyVqModule {
                 }
             }).start();
         };
+        final Runnable playCurrent = playRef[0];
 
+        // 列表按钮需在 playCurrent 定义后绑定
+        btnList.setOnClickListener(v -> showAudioPlaylistPicker(playlist, idx, playCurrent));
         btnPlay.setOnClickListener(v -> {
             if (audioPlayer == null) {
                 playCurrent.run();
@@ -4834,6 +4913,47 @@ public class FileManagerModule extends HyVqModule {
     private void runOnUi(Runnable r) {
         if (hostActivity != null) hostActivity.runOnUiThread(r);
         else handler.post(r);
+    }
+
+    /** 音频弹窗左下角「选择文件」：列出当前播放列表（当前目录的音频），点选即切换 */
+    private void showAudioPlaylistPicker(final java.util.ArrayList<String> list,
+                                         final int[] idx, final Runnable playCurrent) {
+        if (list == null || list.isEmpty()) return;
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "播放列表（" + list.size() + "）"));
+
+        LinearLayout col = new LinearLayout(ctx);
+        col.setOrientation(LinearLayout.VERTICAL);
+        android.widget.ScrollView sc = new android.widget.ScrollView(ctx);
+        sc.addView(col);
+        box.addView(sc, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(300)));
+
+        final android.app.Dialog d = ModuleUiKit.glassDialog(ctx, box);
+        int primary = ModuleUiKit.color(ctx, com.google.android.material.R.attr.colorPrimary);
+        int normal = ModuleUiKit.color(ctx, com.google.android.material.R.attr.colorOnSurface);
+        for (int i = 0; i < list.size(); i++) {
+            final int index = i;
+            String p = list.get(i);
+            int slash = p.lastIndexOf('/');
+            String nm = (slash >= 0 && slash < p.length() - 1) ? p.substring(slash + 1) : p;
+            TextView tv = new TextView(ctx);
+            tv.setText((i + 1) + ".  " + nm);
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            tv.setMaxLines(1);
+            tv.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            tv.setPadding(dp(10), dp(10), dp(10), dp(10));
+            tv.setTextColor(i == idx[0] ? primary : normal);
+            if (i == idx[0]) tv.setTypeface(null, android.graphics.Typeface.BOLD);
+            tv.setOnClickListener(v -> {
+                d.dismiss();
+                idx[0] = index;
+                playCurrent.run();
+            });
+            col.addView(tv);
+        }
+        d.show();
     }
 
     /** 每 500ms 刷新进度与按钮图标（弹窗关闭后自动停止） */
