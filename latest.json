@@ -1,9 +1,9 @@
 {
-  "versionCode": 24,
-  "versionName": "2.3.3",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.3.3/HY_VQ-v2.3.3.apk",
-  "size": 23514485,
-  "md5": "6a980a66822686b5afe75f75bc6c9d76",
+  "versionCode": 25,
+  "versionName": "2.3.4",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.3.4/HY_VQ-v2.3.4.apk",
+  "size": 23522681,
+  "md5": "27e6ad61c95a85995be087bdb6d40e76",
   "force": false,
-  "changelog": "· 【修复】长按菜单的「打开方式」此前会直接走内置打开，导致无法选择其他方式\n· 长按「打开方式」现在**始终弹出选择弹窗**，可自由选择内置方式或系统已注册应用\n· 单击文件的行为保持不变：格式明确且有内置功能时直接调用内置（图片/音视频/文本）\n· 目录、符号链接、虚拟条目在长按「打开方式」时的原有处理不变"
+  "changelog": "· 【修复】音频无法播放：此前用 VideoView 播音频时把它设为不可见，导致 Surface 失效、音频无输出\n· 音频播放改为**原生 MediaPlayer**（不需要 Surface），从根本上解决无输出问题\n· 音频播放改为**弹窗式**：文件名 + 进度条 + 播放/暂停 + 时间显示，不再跳转全屏页\n· 视频仍走全屏页（VideoView 需要可见 Surface，全屏下正常）\n· 关闭弹窗即释放播放器，切换音频时先释放上一个，避免资源泄漏\n· 经核查本地 Gradle 缓存无 media3/ExoPlayer，离线构建无法引入第三方播放库，故坚持零依赖原生实现"
 }
