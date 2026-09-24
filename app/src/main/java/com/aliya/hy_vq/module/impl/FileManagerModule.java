@@ -4236,11 +4236,48 @@ public class FileManagerModule extends HyVqModule {
     }
 
 
+    /** 音视频扩展名：命中则直接调用**内置播放器**，不再走系统外部应用 */
+    private static final java.util.Set<String> MEDIA_EXTS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    // 视频
+                    "mp4", "mkv", "avi", "mov", "wmv", "flv", "3gp", "webm", "ts", "m4v",
+                    "mpg", "mpeg", "rm", "rmvb", "vob", "f4v", "m2ts", "mts", "ogv", "mxf",
+                    // 音频
+                    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma", "amr",
+                    "aiff", "ape", "wv", "mid", "midi", "ac3", "dts", "mka", "ra", "au", "caf"));
+
+    /** 用内置播放器打开（音频/视频统一入口） */
+    private void openWithBuiltInPlayer(String pathOrUri, String name, boolean isUri) {
+        try {
+            Intent i = new Intent(ctx, com.aliya.hy_vq.MediaPlayerActivity.class);
+            if (isUri) {
+                i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_URI, pathOrUri);
+            } else {
+                i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_PATH, pathOrUri);
+            }
+            i.putExtra(com.aliya.hy_vq.MediaPlayerActivity.EXTRA_TITLE, name);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            ctx.startActivity(i);
+        } catch (Throwable t) {
+            ModuleUiKit.toast(ctx, "无法打开播放器：" + t.getMessage());
+        }
+    }
+
+    private static String extOf(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+    }
+
     private void openFile(File f) {
         try {
             String ext = "";
             int dot = f.getName().lastIndexOf('.');
             if (dot >= 0) ext = f.getName().substring(dot + 1).toLowerCase();
+            // 音视频 → 内置播放器（不经系统外部应用）
+            if (MEDIA_EXTS.contains(ext)) {
+                openWithBuiltInPlayer(f.getAbsolutePath(), f.getName(), false);
+                return;
+            }
             String mime = mimeOf(ext);
             Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".fileprovider", f);
             Intent intent = new Intent(Intent.ACTION_VIEW);
@@ -4270,10 +4307,12 @@ public class FileManagerModule extends HyVqModule {
             } catch (Throwable ignored) {
             }
             if (mime == null || mime.isEmpty()) {
-                String ext = "";
-                int dot = e.name.lastIndexOf('.');
-                if (dot >= 0) ext = e.name.substring(dot + 1).toLowerCase();
-                mime = mimeOf(ext);
+                mime = mimeOf(extOf(e.name));
+            }
+            // 音视频 → 内置播放器（content:// 直接交给播放器消费）
+            if (MEDIA_EXTS.contains(extOf(e.name))) {
+                openWithBuiltInPlayer(e.path, e.name, true);
+                return;
             }
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, mime == null ? "*/*" : mime);

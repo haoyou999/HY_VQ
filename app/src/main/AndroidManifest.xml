@@ -51,5 +51,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- 内置音视频播放器：文件管理点击音视频直接调用，不走系统外部应用 -->
+        <activity
+            android:name=".MediaPlayerActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:launchMode="singleTop" />
+
     </application>
 </manifest>
