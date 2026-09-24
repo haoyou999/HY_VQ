@@ -257,6 +257,8 @@ public class MainActivity extends AppCompatActivity {
         loadInstalledModules();
         // 首次构建侧边栏模块区
         handler.postDelayed(this::rebuildDrawerModuleSlot, 100);
+        // 启动时自动检查更新（可在「设置 → 软件更新」关闭）
+        autoCheckUpdateOnLaunch();
     }
 
     private void rebuildDrawerModuleSlot() {
@@ -1512,6 +1514,8 @@ public class MainActivity extends AppCompatActivity {
     /** release 资产基址：latest.json 里 apk 写文件名即可，自动指向最新 release */
     private static final String REMOTE_UPD_BASE =
             "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
+    /** 启动时自动检查更新的偏好键（默认开启） */
+    private static final String PREF_AUTO_CHECK_UPDATE = "auto_check_update";
     private static final String REMOTE_MANIFEST =
             "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/main/latest.json";
 
@@ -1560,6 +1564,27 @@ public class MainActivity extends AppCompatActivity {
         updateView.findViewById(R.id.btn_upd_install_cached).setOnClickListener(v -> {
             if (updCachedApk != null) installApk(updCachedApk);
         });
+        com.google.android.material.switchmaterial.SwitchMaterial swAuto =
+                updateView.findViewById(R.id.switch_upd_auto);
+        TextView tvAutoDesc = updateView.findViewById(R.id.tv_upd_auto_desc);
+        if (swAuto != null) {
+            boolean on = prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true);
+            swAuto.setOnCheckedChangeListener(null);
+            swAuto.setChecked(on);
+            if (tvAutoDesc != null) {
+                tvAutoDesc.setText(on
+                        ? "打开应用时在后台静默检查，发现新版本会提示"
+                        : "已关闭，需手动点击「检查更新」");
+            }
+            swAuto.setOnCheckedChangeListener((btn, checked) -> {
+                prefs.edit().putBoolean(PREF_AUTO_CHECK_UPDATE, checked).apply();
+                if (tvAutoDesc != null) {
+                    tvAutoDesc.setText(checked
+                            ? "打开应用时在后台静默检查，发现新版本会提示"
+                            : "已关闭，需手动点击「检查更新」");
+                }
+            });
+        }
         TextView help = updateView.findViewById(R.id.tv_upd_help);
         if (help != null) {
             help.setText(String.join(System.lineSeparator(), new String[]{
@@ -1727,6 +1752,49 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         Toast.makeText(this, "暂无可安装的更新，请先检查更新", Toast.LENGTH_SHORT).show();
+    }
+
+    /** 启动时自动检查更新：受开关控制，静默进行，只在发现新版本时提示 */
+    private void autoCheckUpdateOnLaunch() {
+        if (prefs == null || !prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true)) return;
+        // 延后执行，避免与首屏渲染争抢资源
+        handler.postDelayed(this::silentCheckUpdate, 2500);
+    }
+
+    /** 后台静默检查：不显示「检查中」，发现新版本才提示 */
+    private void silentCheckUpdate() {
+        new Thread(() -> {
+            org.json.JSONObject json = null;
+            try {
+                java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
+                if (conn.getResponseCode() == 200) {
+                    json = new org.json.JSONObject(readAll(conn.getInputStream()));
+                }
+                conn.disconnect();
+            } catch (Exception ignored) {
+                // 静默检查失败不打扰用户
+            }
+            final org.json.JSONObject fj = json;
+            if (fj == null) return;
+            runOnUiThread(() -> {
+                // 用户若已手动检查过（状态更"新"），不覆盖其结果
+                if (updState == 1) return;
+                updRemote = fj;
+                updState = 2;
+                if (updateView != null) {
+                    renderUpdateView();
+                } else {
+                    updateUpdateStateLabel();
+                }
+                int rCode = fj.optInt("versionCode", 0);
+                String rName = fj.optString("versionName", "");
+                if (rCode > currentPkgCode()) {
+                    Toast.makeText(MainActivity.this,
+                            "发现新版本 v" + rName + "，可在「设置 → 软件更新」中更新",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        }).start();
     }
 
     /** 检查更新：拉取远程清单后刷新页面（结果全部体现在页面内容里） */

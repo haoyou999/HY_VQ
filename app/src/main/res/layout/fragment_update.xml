@@ -264,7 +264,46 @@
             app:iconGravity="textStart"
             app:iconPadding="8dp" />
 
-        <!-- ══════════ ⑥ 说明 ══════════ -->
+        <!-- ══════════ ⑥ 启动自动检查开关 ══════════ -->
+        <LinearLayout
+            android:id="@+id/item_upd_auto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="启动时自动检查更新"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <TextView
+                    android:id="@+id/tv_upd_auto_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="打开应用时在后台静默检查，发现新版本会提示"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switch_upd_auto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- ══════════ ⑦ 说明 ══════════ -->
         <TextView
             android:id="@+id/tv_upd_help"
             android:layout_width="match_parent"
