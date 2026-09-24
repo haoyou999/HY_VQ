@@ -107,6 +107,14 @@ public class MainActivity extends AppCompatActivity {
     private static final int PAGE_HOME = 0;
     private static final int PAGE_FILEMGR = 1;
     private static final int PAGE_ABOUT = 2;
+    private static final int PAGE_UPDATE = 8;
+    /** 远程检查状态：0 未检查 / 1 检查中 / 2 检查完成无新版 / 4 检查失败 */
+    private int updState = 0;
+    private String updError = "";
+    /** 最近一次检查到的远程清单 */
+    private org.json.JSONObject updRemote;
+    /** 本机缓存中可安装的更新包（比当前版本新） */
+    private File updCachedApk;
     /** 开源仓库地址（与 README / LICENSE 一致） */
     private static final String OPEN_SOURCE_URL = "https://github.com/haoyou999/HY_VQ";
     private static final int PAGE_SETTINGS = 3;
@@ -118,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private ActionBarDrawerToggle toggle;
 
-    private View homeView, settingsView, accountView, moduleSettingsView, permissionsView, aboutView;
+    private View homeView, settingsView, accountView, moduleSettingsView, permissionsView, aboutView, updateView;
     private ViewGroup contentFrame;
     private SharedPreferences prefs;
     private SignatureManager signatureManager;
@@ -392,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
         }
         aboutView.findViewById(R.id.item_about_repo).setOnClickListener(v -> openUrl(OPEN_SOURCE_URL));
         aboutView.findViewById(R.id.item_about_license).setOnClickListener(v -> showLicenseDialog());
-        aboutView.findViewById(R.id.item_about_changelog).setOnClickListener(v -> showUpdateDialog());
+        aboutView.findViewById(R.id.item_about_changelog).setOnClickListener(v -> switchToUpdate());
     }
 
     /** 用系统浏览器打开链接 */
@@ -872,6 +880,7 @@ public class MainActivity extends AppCompatActivity {
         settingsView = null;
         accountView = null;
         aboutView = null;
+        updateView = null;
         moduleSettingsView = null;
         permissionsView = null;
         hideHintRunnable = null;
@@ -953,6 +962,10 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (aboutView != null && aboutView.getParent() != null) {
+            switchToSettings();
+            return true;
+        }
+        if (updateView != null && updateView.getParent() != null) {
             switchToSettings();
             return true;
         }
@@ -1392,7 +1405,7 @@ public class MainActivity extends AppCompatActivity {
             tvModuleCountSetting.setText(moduleRegistry.getAllModules().size() + "个");
         }
         // 软件更新状态行（更新包版本随时可能变化，进入时刷新）
-        refreshUpdateState();
+        updateUpdateStateLabel();
         switchContent(settingsView, PAGE_SETTINGS);
         resetToolbar();
         binding.toolbarTitle.setText("设置");
@@ -1432,7 +1445,7 @@ public class MainActivity extends AppCompatActivity {
         settingsView.findViewById(R.id.item_permission).setOnClickListener(v -> switchToPermissions());
         // 软件更新入口（增量更新包导入中心）
         View itemUpdate = settingsView.findViewById(R.id.item_update);
-        if (itemUpdate != null) itemUpdate.setOnClickListener(v -> showUpdateDialog());
+        if (itemUpdate != null) itemUpdate.setOnClickListener(v -> switchToUpdate());
         // 房间联机功能开关（紧凑行：整行可点切换；关闭时隐藏抽屉入口并关闭对话框）
         View itemTc = settingsView.findViewById(R.id.item_terracotta);
         com.google.android.material.switchmaterial.SwitchMaterial swTc =
@@ -1476,84 +1489,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 刷新设置页"软件更新"行状态文本 */
-    private void refreshUpdateState() {
-        if (settingsView == null) return;
-        TextView tv = settingsView.findViewById(R.id.tv_update_state);
-        if (tv == null) return;
-        String ver = UpdateManager.currentVersionName(this);
-        tv.setText(ver != null ? "v" + ver + " · 更新包" : "v" + baseVersionName() + " · 内置");
-    }
-
-    /** 更新中心对话框：壳/更新包版本 + 导入按钮 */
-    private void showUpdateDialog() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(ModuleUiKit.sectionHeader(this, "🔄 软件更新"));
-
-        TextView info = new TextView(this);
-        info.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        info.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
-        info.setLineSpacing(0, 1.35f);
-        int pad = dp2(4);
-        info.setPadding(pad, pad, pad, pad);
-
-        int pkgCode = 0;
-        try {
-            pkgCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
-        } catch (Exception ignored) {
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("壳版本：v").append(baseVersionName())
-                .append(" (code ").append(pkgCode).append(")\n");
-        int uCode = UpdateManager.currentVersion(this);
-        String uName = UpdateManager.currentVersionName(this);
-        if (uCode > 0) {
-            sb.append("更新包：v").append(uName == null ? "?" : uName)
-                    .append(" (code ").append(uCode).append(") 已激活\n");
-        } else {
-            sb.append("更新包：未安装\n");
-        }
-        sb.append("\n更新方式：从云端更新源检查新版本，\n")
-                .append("· 在线下载 APK → MD5 完整性校验 → 系统安装器安装\n")
-                .append("· 不再使用 zip 更新包，也无需手动导入\n")
-                .append("· 用户数据（书签/设置/偏好）全部保留");
-        // 缓存检测：缓存里已有比当前版本更新的安装包 → 提示并可直接安装
-        // （原生安装器不会删除缓存 APK，故每次打开都主动检查，避免重复下载）
-        final File[] cachedNewer = findCachedNewerApks(pkgCode);
-        if (cachedNewer.length > 0) {
-            File newest = cachedNewer[0];
-            for (File f : cachedNewer) {
-                if (f.lastModified() > newest.lastModified()) newest = f;
-            }
-            sb.append("\n📦 检测到已下载的更新包：").append(cachedApkLabel(newest))
-                    .append("（").append(fmtSize(newest.length())).append("）")
-                    .append("\n无需重新下载，可直接安装。");
-            final File installTarget = newest;
-            cachedInstallTarget = installTarget;
-        } else {
-            cachedInstallTarget = null;
-        }
-        info.setText(sb.toString());
-        box.addView(info);
-
-        LinearLayout btns = new LinearLayout(this);
-        btns.setOrientation(LinearLayout.HORIZONTAL);
-        btns.setGravity(Gravity.END);
-        box.addView(btns);
-
-        android.app.Dialog dialog = ModuleUiKit.glassDialog(this, box);
-        btns.addView(updateTextButton("检查更新", v -> {
-            checkRemoteUpdate(dialog);
-        }));
-        if (cachedInstallTarget != null) {
-            btns.addView(updateTextButton("直接安装", v -> {
-                dialog.dismiss();
-                installApk(cachedInstallTarget);
-            }));
-        }
-        dialog.show();
-    }
-
     /** 更新中心按钮（ModuleUiKit 风格纯代码构建） */
     private TextView updateTextButton(String text, View.OnClickListener onClick) {
         TextView tv = new TextView(this);
@@ -1577,8 +1512,6 @@ public class MainActivity extends AppCompatActivity {
     /** release 资产基址：latest.json 里 apk 写文件名即可，自动指向最新 release */
     private static final String REMOTE_UPD_BASE =
             "https://github.com/" + GH_OWNER + "/" + GH_REPO + "/releases/latest/download/";
-    /** 本次打开「软件更新」时检测到的可安装缓存包（供「直接安装」按钮使用） */
-    private File cachedInstallTarget;
     private static final String REMOTE_MANIFEST =
             "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/main/latest.json";
 
@@ -1608,113 +1541,229 @@ public class MainActivity extends AppCompatActivity {
         throw new Exception("重定向次数过多");
     }
 
-    /** 检查更新：读取远程 latest.json → 比对版本 → 展示更新日志 → 一键下载安装 */
-    private void checkRemoteUpdate(final android.app.Dialog dialog) {
-        Toast.makeText(this, "正在检查更新…", Toast.LENGTH_SHORT).show();
+    // ==================== 软件更新页 ====================
+
+    private void switchToUpdate() {
+        if (updateView == null) {
+            updateView = LayoutInflater.from(this).inflate(R.layout.fragment_update, contentFrame, false);
+            setupUpdateView();
+        }
+        renderUpdateView();
+        switchContent(updateView, PAGE_UPDATE);
+        setSubpageToolbar("软件更新");
+    }
+
+    private void setupUpdateView() {
+        if (updateView == null) return;
+        updateView.findViewById(R.id.btn_upd_check).setOnClickListener(v -> checkRemoteUpdate());
+        updateView.findViewById(R.id.btn_upd_action).setOnClickListener(v -> onUpdateAction());
+        updateView.findViewById(R.id.btn_upd_install_cached).setOnClickListener(v -> {
+            if (updCachedApk != null) installApk(updCachedApk);
+        });
+        TextView help = updateView.findViewById(R.id.tv_upd_help);
+        if (help != null) {
+            help.setText(String.join(System.lineSeparator(), new String[]{
+                    "· 从公开更新源获取版本清单，在线下载安装包",
+                    "· 下载完成自动校验 MD5，通过后交由系统安装器安装",
+                    "· 安装包会缓存在本机，再次进入本页可直接安装，无需重复下载",
+                    "· 更新不会影响书签、设置与浏览偏好"
+            }));
+        }
+    }
+
+    private int currentPkgCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** 统一渲染更新页内容：状态卡 / 更新日志卡 / 缓存卡 / 操作按钮 */
+    private void renderUpdateView() {
+        if (updateView == null) return;
+        final int cur = currentPkgCode();
+
+        TextView tvCur = updateView.findViewById(R.id.tv_upd_current);
+        if (tvCur != null) tvCur.setText("v" + baseVersionName());
+        TextView tvChan = updateView.findViewById(R.id.tv_upd_channel);
+        if (tvChan != null) tvChan.setText("版本号 " + cur + " · 稳定版");
+
+        // 缓存检测：本机是否已存有更新的安装包（原生安装器不会清理缓存包）
+        File[] newer = findCachedNewerApks(cur);
+        updCachedApk = null;
+        if (newer.length > 0) {
+            File best = newer[0];
+            for (File f : newer) if (f.lastModified() > best.lastModified()) best = f;
+            updCachedApk = best;
+        }
+
+        final int rCode = updRemote == null ? 0 : updRemote.optInt("versionCode", 0);
+        final String rName = updRemote == null ? "" : updRemote.optString("versionName", "");
+        final boolean hasNew = rCode > cur;
+        final boolean canInstall = hasNew || updCachedApk != null;
+
+        // ── 状态卡 ──
+        TextView title = updateView.findViewById(R.id.tv_upd_status_title);
+        TextView desc = updateView.findViewById(R.id.tv_upd_status_desc);
+        ImageView icon = updateView.findViewById(R.id.iv_upd_status_icon);
+        if (updState == 1) {
+            if (title != null) title.setText("正在检查更新…");
+            if (desc != null) desc.setText("正在连接更新源，请稍候");
+            if (icon != null) icon.setImageResource(R.drawable.ic_refresh);
+        } else if (updState == 4) {
+            if (title != null) title.setText("检查更新失败");
+            if (desc != null) desc.setText(updError.isEmpty() ? "无法连接更新源，请检查网络后重试" : updError);
+            if (icon != null) icon.setImageResource(R.drawable.ic_network);
+        } else if (hasNew) {
+            if (title != null) title.setText("发现新版本 v" + rName);
+            if (desc != null) desc.setText("版本号 " + rCode + " · 建议更新以获得最新修复");
+            if (icon != null) icon.setImageResource(R.drawable.ic_download);
+        } else if (updCachedApk != null) {
+            if (title != null) title.setText("可安装 " + cachedApkLabel(updCachedApk));
+            if (desc != null) desc.setText("安装包已在本机缓存，无需重新下载");
+            if (icon != null) icon.setImageResource(R.drawable.ic_download);
+        } else if (updState == 2) {
+            if (title != null) title.setText("已是最新版本");
+            if (desc != null) desc.setText("当前 v" + baseVersionName() + "，无需更新");
+            if (icon != null) icon.setImageResource(R.drawable.ic_star);
+        } else {
+            if (title != null) title.setText("检查更新");
+            if (desc != null) desc.setText("点击下方按钮获取最新版本信息");
+            if (icon != null) icon.setImageResource(R.drawable.ic_refresh);
+        }
+
+        // ── 更新日志卡 ──
+        View logCard = updateView.findViewById(R.id.card_upd_changelog);
+        if (logCard != null) {
+            if (hasNew) {
+                logCard.setVisibility(View.VISIBLE);
+                TextView tvNew = updateView.findViewById(R.id.tv_upd_new_version);
+                if (tvNew != null) tvNew.setText("v" + rName);
+                TextView tvMeta = updateView.findViewById(R.id.tv_upd_meta);
+                if (tvMeta != null) {
+                    long sz = updRemote.optLong("size", 0L);
+                    String pub = updRemote.optString("publishedAt", "");
+                    StringBuilder m = new StringBuilder();
+                    if (sz > 0) m.append(fmtSize(sz));
+                    if (!pub.isEmpty()) {
+                        if (m.length() > 0) m.append(" · ");
+                        m.append(pub);
+                    }
+                    tvMeta.setText(m.toString());
+                }
+                TextView tvLog = updateView.findViewById(R.id.tv_upd_changelog);
+                if (tvLog != null) {
+                    String log = updRemote.optString("changelog", "");
+                    tvLog.setText(log.isEmpty() ? "· 细节优化与问题修复" : log);
+                }
+            } else {
+                logCard.setVisibility(View.GONE);
+            }
+        }
+
+        // ── 缓存卡 ──
+        View cacheCard = updateView.findViewById(R.id.card_upd_cache);
+        if (cacheCard != null) {
+            if (updCachedApk != null) {
+                cacheCard.setVisibility(View.VISIBLE);
+                TextView ci = updateView.findViewById(R.id.tv_upd_cache_info);
+                if (ci != null) {
+                    ci.setText(cachedApkLabel(updCachedApk)
+                            + System.lineSeparator()
+                            + "大小 " + fmtSize(updCachedApk.length()) + " · 已通过完整性校验");
+                }
+            } else {
+                cacheCard.setVisibility(View.GONE);
+            }
+        }
+
+        // ── 操作按钮 ──
+        View btnCheck = updateView.findViewById(R.id.btn_upd_check);
+        if (btnCheck != null) btnCheck.setEnabled(updState != 1);
+        View btnAction = updateView.findViewById(R.id.btn_upd_action);
+        if (btnAction != null) {
+            if (canInstall) {
+                btnAction.setVisibility(View.VISIBLE);
+                boolean reuse = updCachedApk != null
+                        && (!hasNew || updCachedApk.length() == updRemote.optLong("size", 0L));
+                ((com.google.android.material.button.MaterialButton) btnAction)
+                        .setText(reuse ? "立即安装（使用缓存）" : "立即更新");
+            } else {
+                btnAction.setVisibility(View.GONE);
+            }
+        }
+        updateUpdateStateLabel();
+    }
+
+    /** 同步设置页上的更新状态标签 */
+    private void updateUpdateStateLabel() {
+        if (settingsView == null) return;
+        TextView tv = settingsView.findViewById(R.id.tv_update_state);
+        if (tv == null) return;
+        int cur = currentPkgCode();
+        if (updRemote != null && updRemote.optInt("versionCode", 0) > cur) {
+            tv.setText("有新版 " + updRemote.optString("versionName", ""));
+        } else if (updCachedApk != null) {
+            tv.setText("待安装");
+        } else {
+            tv.setText("v" + baseVersionName());
+        }
+    }
+
+    /** 主操作按钮：按当前状态选择「下载」或「直接安装」 */
+    private void onUpdateAction() {
+        if (updRemote != null) {
+            int rCode = updRemote.optInt("versionCode", 0);
+            String apk = updRemote.optString("apk", "");
+            if (rCode > 0 && !apk.isEmpty()) {
+                String url = apk.startsWith("http") ? apk : REMOTE_UPD_BASE + apk;
+                startUpdate(url, updRemote.optString("md5", ""), updRemote.optLong("size", 0L), rCode, null);
+                return;
+            }
+        }
+        if (updCachedApk != null) {
+            installApk(updCachedApk);
+            return;
+        }
+        Toast.makeText(this, "暂无可安装的更新，请先检查更新", Toast.LENGTH_SHORT).show();
+    }
+
+    /** 检查更新：拉取远程清单后刷新页面（结果全部体现在页面内容里） */
+    private void checkRemoteUpdate() {
+        updState = 1;
+        updError = "";
+        renderUpdateView();
         new Thread(() -> {
-            String msg = null;
             org.json.JSONObject json = null;
+            String err = null;
             try {
                 java.net.HttpURLConnection conn = openRemote(REMOTE_MANIFEST, "GET");
                 int code = conn.getResponseCode();
                 if (code == 200) {
                     json = new org.json.JSONObject(readAll(conn.getInputStream()));
-                } else if (code == 401) {
-                    msg = "更新源授权失败(401)，请检查网盘账号配置。";
                 } else if (code == 404) {
-                    msg = "远程未找到更新清单(latest.json)。";
+                    err = "更新源未找到版本清单";
                 } else {
-                    msg = "更新源响应异常(HTTP " + code + ")。";
+                    err = "更新源响应异常 (HTTP " + code + ")";
                 }
                 conn.disconnect();
             } catch (Exception e) {
-                msg = "检查更新失败：" + e.getMessage();
+                err = "检查失败：" + e.getMessage();
             }
             final org.json.JSONObject fj = json;
-            final String fmsg = msg;
+            final String ferr = err;
             runOnUiThread(() -> {
-                if (dialog != null && dialog.isShowing()) dialog.dismiss();
-                if (fj == null) {
-                    Toast.makeText(this, fmsg, Toast.LENGTH_LONG).show();
+                if (fj != null) {
+                    updRemote = fj;
+                    updState = 2;
                 } else {
-                    showRemoteUpdateResult(fj);
+                    updState = 4;
+                    updError = ferr == null ? "" : ferr;
                 }
+                renderUpdateView();
             });
         }).start();
-    }
-
-    /** 展示版本比对结果：有新版给出更新日志 + 立即更新按钮 */
-    private void showRemoteUpdateResult(org.json.JSONObject j) {
-        final int rCode = j.optInt("versionCode", 0);
-        final String rName = j.optString("versionName", "?");
-        final String rApk = j.optString("apk", "");
-        final String rMd5 = j.optString("md5", "");
-        final String rLog = j.optString("changelog", "");
-        final long rSize = j.optLong("size", 0L);
-
-        // 缓存检测：同版本安装包若已下载且大小吻合，直接安装，不重复下载
-        final File cached = updateCacheFile(rCode);
-        final boolean hasCache = cached.exists() && cached.length() > 0
-                && (rSize <= 0 || cached.length() == rSize);
-
-        int cur = UpdateManager.currentVersion(this);
-        if (cur <= 0) {
-            try {
-                cur = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
-            } catch (Exception ignored) {
-            }
-        }
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(ModuleUiKit.sectionHeader(this, "🔄 软件更新"));
-
-        TextView tv = new TextView(this);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        tv.setLineSpacing(0, 1.4f);
-        tv.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
-        int pad = dp2(4);
-        tv.setPadding(pad, pad, pad, pad);
-
-        android.app.Dialog d = ModuleUiKit.glassDialog(this, box);
-        LinearLayout btns = new LinearLayout(this);
-        btns.setOrientation(LinearLayout.HORIZONTAL);
-        btns.setGravity(Gravity.END);
-
-        if (rCode <= cur) {
-            tv.setText("✅ 当前已是最新版本\n\n当前版本：v" + rName + " (code " + rCode + ")");
-            box.addView(tv);
-            btns.addView(updateTextButton("知道了", v -> d.dismiss()));
-            box.addView(btns);
-            d.show();
-            return;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("🎉 发现新版本\n\n");
-        sb.append("当前版本：v").append(baseVersionName()).append(" (code ").append(cur).append(")\n");
-        sb.append("最新版本：v").append(rName).append(" (code ").append(rCode).append(")\n");
-        if (rSize > 0) {
-            sb.append("安装包大小：").append(String.format(java.util.Locale.CHINA, "%.1f", rSize / 1048576.0)).append(" MB\n");
-        }
-        if (hasCache) {
-            sb.append("\n📦 安装包已在缓存中（").append(fmtSize(cached.length())).append("），可直接安装\n");
-        }
-        sb.append("\n更新内容：\n");
-        sb.append(rLog.isEmpty() ? "· 细节优化与问题修复" : rLog);
-        tv.setText(sb.toString());
-        box.addView(tv);
-
-        if (rApk.isEmpty()) {
-            btns.addView(updateTextButton("关闭", v -> d.dismiss()));
-        } else {
-            final String apkUrl = rApk.startsWith("http") ? rApk : REMOTE_UPD_BASE + rApk;
-            btns.addView(updateTextButton("稍后", v -> d.dismiss()));
-            btns.addView(updateTextButton(hasCache ? "立即安装" : "立即更新",
-                    v -> startUpdate(apkUrl, rMd5, rSize, rCode, d)));
-        }
-        box.addView(btns);
-        d.show();
     }
 
     // ── 更新包缓存（原生安装器不会自动删除缓存 APK，故自行管理）──
@@ -1807,6 +1856,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, ferr, Toast.LENGTH_LONG).show();
                 } else {
                     cleanUpdateCache(apk);
+                    renderUpdateView();
                     installApk(apk);
                 }
             });
@@ -1900,6 +1950,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "下载失败：" + ferr, Toast.LENGTH_LONG).show();
                 } else {
                     cleanUpdateCache(ftarget);   // 只保留刚下载的这版
+                    renderUpdateView();
                     installApk(ftarget);
                 }
             });
