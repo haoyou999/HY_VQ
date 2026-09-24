@@ -1,9 +1,9 @@
 {
-  "versionCode": 18,
-  "versionName": "2.1.0",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.1.0/HY_VQ-v2.1.0.apk",
-  "size": 23471870,
-  "md5": "45309fe7ce99043f3440ed2669b7413a",
+  "versionCode": 19,
+  "versionName": "2.1.1",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.1.1/HY_VQ-v2.1.1.apk",
+  "size": 23477204,
+  "md5": "098de026e8bbec6c2ebbc333afd5037b",
   "force": false,
-  "changelog": "· 更新页改为「最新版本 / 当前版本 / 历史版本」三段式，历史版本默认折叠，列表不再冗长\n· 新增国内辅助更新源（123 云盘 WebDAV）：GitHub 不可达时自动回退读取版本列表\n· 下载同样支持回退：主源下载失败会自动切换到国内源，无需手动重试\n· 国内源使用同账号的只读密码，即使 APK 被反编译也无法写入任何内容\n· 版本信息与安装包在发布流程中自动同步到国内源\n· 保留：启动自动扫描、发现新版弹窗、下载进度、缓存复用与清理"
+  "changelog": "· 历史版本展开/收起加入平滑过渡动画（AutoTransition，240ms 淡入淡出 + 高度变化），不再是生硬闪现\n· 展开按钮重做为圆角药丸样式（TonalButton），带图标跟随状态切换（展开▼ / 收起▲）\n· 展开按钮与整行标题都可点击切换，按钮自带水波纹反馈\n· 过渡仅在切换瞬间启用，列表刷新时不会引起整页闪动"
 }
