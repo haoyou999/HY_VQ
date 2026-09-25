@@ -7,6 +7,7 @@
     android:padding="16dp">
 
     <LinearLayout
+        android:id="@+id/about_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical">
@@ -248,6 +249,57 @@
             android:lineSpacingExtra="5dp"
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <!-- 完整致谢（默认折叠，避免列表过长） -->
+        <LinearLayout
+            android:id="@+id/box_about_credits_more"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="2dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tv_about_credits_more"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="5dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <!-- 折叠开关：整行可点 -->
+        <LinearLayout
+            android:id="@+id/row_about_credits_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingVertical="8dp">
+
+            <TextView
+                android:id="@+id/tv_about_credits_toggle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:text="展开完整致谢"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorPrimary" />
+
+            <ImageView
+                android:id="@+id/iv_about_credits_arrow"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_expand_more"
+                android:contentDescription="展开"
+                android:tint="?attr/colorPrimary" />
+        </LinearLayout>
 
         
         <!-- ══ 声明 ══ -->

@@ -4,6 +4,23 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="?attr/colorSurface">
+
+    <!-- 设置项区：占满剩余高度并可滚动（项变多时不会被挤出屏幕） -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+    android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="?attr/colorSurface"
     android:paddingTop="8dp">
 
@@ -66,15 +83,6 @@
     <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
 
     <!-- 关于 -->
-    <LinearLayout android:id="@+id/item_about" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="13dp">
-        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardCornerRadius="12dp" app:cardElevation="0dp" app:cardBackgroundColor="?attr/colorPrimaryContainer">
-            <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_info" android:contentDescription="关于" android:padding="9dp" android:tint="?attr/colorPrimary" />
-        </com.google.android.material.card.MaterialCardView>
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" android:text="关于" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
-        <TextView android:id="@+id/tv_about_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
-        <ImageView android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_chevron_right" android:contentDescription="进入" />
-    </LinearLayout>
-    <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
 
 
     <!-- 存储管理 -->
@@ -112,6 +120,21 @@
     <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
 
     <!-- 退出登录（始终最底部） -->
+
+    <LinearLayout android:id="@+id/item_about" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="13dp">
+        <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardCornerRadius="12dp" app:cardElevation="0dp" app:cardBackgroundColor="?attr/colorPrimaryContainer">
+            <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_info" android:contentDescription="关于" android:padding="9dp" android:tint="?attr/colorPrimary" />
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" android:text="关于" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
+        <TextView android:id="@+id/tv_about_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
+        <ImageView android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_chevron_right" android:contentDescription="进入" />
+    </LinearLayout>
+    <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 退出登录：固定贴屏幕最底端（不随设置项滚动） -->
     <LinearLayout android:id="@+id/item_logout" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="14dp">
         <com.google.android.material.card.MaterialCardView android:layout_width="40dp" android:layout_height="40dp" app:cardCornerRadius="12dp" app:cardElevation="0dp" app:cardBackgroundColor="?attr/colorErrorContainer">
             <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_arrow_back" android:contentDescription="退出" android:padding="9dp" android:tint="?attr/colorError" />

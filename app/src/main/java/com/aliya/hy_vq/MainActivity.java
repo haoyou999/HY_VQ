@@ -377,14 +377,66 @@ public class MainActivity extends AppCompatActivity {
         TextView tvRepo = aboutView.findViewById(R.id.tv_about_repo);
         if (tvRepo != null) tvRepo.setText(OPEN_SOURCE_URL.replace("https://", ""));
 
+        // ── 致谢：主列表常显，完整列表默认折叠 ──
+        final String[] MAIN_CREDITS = {
+                "Material Files —— 目录滚动位置记忆、双窗格交互的设计思路",
+                "Terracotta —— 局域网 P2P 直连运行库",
+                "Material Components for Android —— Material 3 组件与主题体系",
+                "AndroidX —— 基础支持库",
+                "呜哇小站 emoji.wuwa.games —— 免费提供鸣潮表情包 API（本应用已主动限流）",
+        };
+        final String[] MORE_CREDITS = {
+                "",
+                "【同样致谢以下项目】",
+                "MT 管理器 —— 双窗格文件管理交互与长按菜单的参考",
+                "ZhuFiler —— 主题叠加与目录缓存实现的参考",
+                "Amaze File Manager —— 底部导航栏（文件/分类/回收站/网络）的风格参考",
+                "Fossify File Manager —— 同类实现与交互细节参考",
+                "Ghost Commander —— 网络能力（FTP 服务端）的方向参考",
+                "Blurry / BlurView —— 浮窗与侧边栏背景模糊的实现原理参考",
+                "",
+                "【历史参考，代码现已不再使用，但仍致谢】",
+                "Jetpack Media3 / ExoPlayer —— 曾评估引入媒体播放，因本项目需离线构建而改用原生实现",
+                "pnpm —— 早期构建与依赖管理工具（非应用内组件）",
+                "",
+                "感谢上述所有开源作者与免费服务的提供者。",
+                "本项目以 GPL-3.0 发布，相关代码与资源版权归各自原作者所有。",
+        };
+
         TextView tvCredits = aboutView.findViewById(R.id.tv_about_credits);
-        if (tvCredits != null) {
-            tvCredits.setText(String.join(System.lineSeparator(), new String[]{
-                    "Material Files —— 目录滚动位置记忆的设计思路",
-                    "Terracotta —— 局域网 P2P 直连运行库",
-                    "Material Components for Android —— Material 3 组件",
-                    "AndroidX —— 基础支持库"
-            }));
+        if (tvCredits != null) tvCredits.setText(String.join(System.lineSeparator(), MAIN_CREDITS));
+        final TextView tvCreditsMore = aboutView.findViewById(R.id.tv_about_credits_more);
+        if (tvCreditsMore != null) {
+            tvCreditsMore.setText(String.join(System.lineSeparator(), MORE_CREDITS));
+        }
+
+        final View creditsMoreBox = aboutView.findViewById(R.id.box_about_credits_more);
+        final TextView creditsToggle = aboutView.findViewById(R.id.tv_about_credits_toggle);
+        final ImageView creditsArrow = aboutView.findViewById(R.id.iv_about_credits_arrow);
+        View creditsToggleRow = aboutView.findViewById(R.id.row_about_credits_toggle);
+        if (creditsToggleRow != null) {
+            creditsToggleRow.setOnClickListener(v -> {
+                boolean expand = creditsMoreBox != null
+                        && creditsMoreBox.getVisibility() != View.VISIBLE;
+                // 平滑过渡（同更新页历史版本的做法）
+                ViewGroup scene = aboutView.findViewById(R.id.about_content);
+                if (scene != null) {
+                    android.transition.TransitionManager.beginDelayedTransition(
+                            scene, new android.transition.AutoTransition().setDuration(220));
+                }
+                if (creditsMoreBox != null) {
+                    creditsMoreBox.setVisibility(expand ? View.VISIBLE : View.GONE);
+                }
+                if (creditsToggle != null) {
+                    creditsToggle.setText(expand
+                            ? "收起完整致谢（共 " + (MAIN_CREDITS.length + MORE_CREDITS.length - 1) + " 条目）"
+                            : "展开完整致谢（共 " + (MAIN_CREDITS.length + MORE_CREDITS.length - 1) + " 条目）");
+                }
+                if (creditsArrow != null) {
+                    creditsArrow.setImageResource(expand
+                            ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+                }
+            });
         }
         TextView tvDisc = aboutView.findViewById(R.id.tv_about_disclaimer);
         if (tvDisc != null) {
