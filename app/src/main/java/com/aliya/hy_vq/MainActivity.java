@@ -28,6 +28,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -1505,10 +1506,11 @@ public class MainActivity extends AppCompatActivity {
         settingsView.findViewById(R.id.item_general).setOnClickListener(v -> showDefaultPageDialog());
         View itemAbout = settingsView.findViewById(R.id.item_about);
         if (itemAbout != null) itemAbout.setOnClickListener(v -> switchToAbout());
+        refreshStorageLabel();
+        refreshNotificationLabel();
         TextView tvAboutLabel = settingsView.findViewById(R.id.tv_about_label);
         if (tvAboutLabel != null) tvAboutLabel.setText("v" + baseVersionName());
-        settingsView.findViewById(R.id.item_storage).setOnClickListener(v ->
-                Toast.makeText(this, "存储管理开发中", Toast.LENGTH_SHORT).show());
+        settingsView.findViewById(R.id.item_storage).setOnClickListener(v -> showStorageManagerDialog());
         // 模块设置入口
         View itemModule = settingsView.findViewById(R.id.item_module);
         if (itemModule != null) itemModule.setOnClickListener(v -> switchToModuleSettings());
@@ -1517,8 +1519,7 @@ public class MainActivity extends AppCompatActivity {
         if (tvModuleCountSetting != null) {
             tvModuleCountSetting.setText(moduleRegistry.getAllModules().size() + "个");
         }
-        settingsView.findViewById(R.id.item_notification).setOnClickListener(v ->
-                Toast.makeText(this, "通知管理待开发", Toast.LENGTH_SHORT).show());
+        settingsView.findViewById(R.id.item_notification).setOnClickListener(v -> showNotificationSettingsDialog());
         // 权限管理入口（检查各项权限申请情况）
         settingsView.findViewById(R.id.item_permission).setOnClickListener(v -> switchToPermissions());
         // 软件更新入口（增量更新包导入中心）
@@ -2155,11 +2156,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    /** 启动时自动检查更新：受开关控制，静默进行，只在发现新版本时提示 */
+    /**
+     * 启动流程的更新检查（受开关控制，静默进行，仅发现新版本才提示）。
+     *
+     * <p>启动链路：**先判登录状态** → 未登录则去 LoginActivity，登录成功后回到本页；
+     * 已登录则直接进入本页。两条路径都会走到这里，<b>立即发起检查、不做延迟等待</b>
+     * （此前是延后 2.5 秒，用户反馈不需要这种等待）。</p>
+     *
+     * <p>用 {@code handler.post} 而非直接调用，是把检查放到当前消息队列尾部，
+     * 既"立即"又能让首帧先完成布局，避免白屏期间抢主线程。</p>
+     */
     private void autoCheckUpdateOnLaunch() {
         if (prefs == null || !prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true)) return;
-        // 延后执行，避免与首屏渲染争抢资源
-        handler.postDelayed(this::silentCheckUpdate, 2500);
+        android.util.Log.i("HyVqUpdate", "启动检查：立即发起（无需等待）");
+        handler.post(this::silentCheckUpdate);
     }
 
     /** 后台静默检查：不显示「检查中」，发现新版本才提示 */
@@ -2175,7 +2185,10 @@ public class MainActivity extends AppCompatActivity {
                 if (updateView != null) renderUpdateView();
                 else updateUpdateStateLabel();
                 ReleaseInfo newest = list.get(0);
-                if (compareVersion(newest.ver, baseVersionName()) > 0) showAutoUpdatePrompt(newest);
+                if (compareVersion(newest.ver, baseVersionName()) > 0
+                        && prefs.getBoolean(PREF_NOTIFY_NEW_VERSION, true)) {
+                    showAutoUpdatePrompt(newest);
+                }
             });
         }).start();
     }
@@ -2274,6 +2287,188 @@ public class MainActivity extends AppCompatActivity {
 
 
     // ── 更新包缓存（原生安装器不会自动删除缓存 APK，故自行管理）──
+
+    // ==================== 存储管理 ====================
+
+    private long dirSize(File dir) {
+        if (dir == null || !dir.exists()) return 0L;
+        if (dir.isFile()) return dir.length();
+        long total = 0L;
+        File[] fs = dir.listFiles();
+        if (fs != null) {
+            for (File f : fs) total += dirSize(f);
+        }
+        return total;
+    }
+
+    private File trashDir() {
+        return new File(Environment.getExternalStorageDirectory(), ".HyVqTrash");
+    }
+
+    private void refreshStorageLabel() {
+        if (settingsView == null) return;
+        TextView tv = settingsView.findViewById(R.id.tv_storage_state);
+        if (tv == null) return;
+        try {
+            android.os.StatFs sf = new android.os.StatFs(
+                    Environment.getExternalStorageDirectory().getAbsolutePath());
+            tv.setText(fmtSize(sf.getAvailableBytes()) + " 可用");
+        } catch (Throwable t) {
+            tv.setText("");
+        }
+    }
+
+    /** 存储管理：用量概览 + 缓存清理 + 回收站清空 */
+    private void showStorageManagerDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "📦 存储管理"));
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tv.setLineSpacing(0, 1.4f);
+        tv.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        int pad = dp2(4);
+        tv.setPadding(pad, pad, pad, pad);
+
+        long total = 0, free = 0;
+        try {
+            android.os.StatFs sf = new android.os.StatFs(
+                    Environment.getExternalStorageDirectory().getAbsolutePath());
+            total = sf.getTotalBytes();
+            free = sf.getAvailableBytes();
+        } catch (Throwable ignored) {
+        }
+        long used = Math.max(0, total - free);
+        int pct = total > 0 ? (int) (used * 100 / total) : 0;
+        long cacheBytes = dirSize(updateCacheDir());
+        File trash = trashDir();
+        long trashBytes = dirSize(trash);
+        File[] tf = trash.listFiles();
+        int trashCount = tf == null ? 0 : tf.length;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("内部存储").append(System.lineSeparator());
+        sb.append("· 总容量　").append(fmtSize(total)).append(System.lineSeparator());
+        sb.append("· 已使用　").append(fmtSize(used)).append("（").append(pct).append("%）").append(System.lineSeparator());
+        sb.append("· 可　用　").append(fmtSize(free)).append(System.lineSeparator());
+        sb.append(System.lineSeparator()).append("可清理项").append(System.lineSeparator());
+        sb.append("· 更新包缓存　").append(fmtSize(cacheBytes)).append(System.lineSeparator());
+        sb.append("· 回收站　　").append(trashCount).append(" 项 · ").append(fmtSize(trashBytes));
+        tv.setText(sb.toString());
+        box.addView(tv);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(this, box);
+        btns.addView(updateTextButton("清理更新缓存", v -> {
+            File[] fs = updateCacheDir().listFiles();
+            int n = 0;
+            if (fs != null) {
+                for (File f : fs) {
+                    if (f.getName().startsWith("hyvq_update") && f.delete()) n++;
+                }
+            }
+            Toast.makeText(this, "已清理 " + n + " 个更新包缓存", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+            refreshStorageLabel();
+        }));
+        btns.addView(updateTextButton("清空回收站", v -> {
+            File[] fs = trash.listFiles();
+            int n = fs == null ? 0 : fs.length;
+            if (fs != null) {
+                for (File f : fs) deleteRecursive(f);   // 既有的 void 版，递归删除
+            }
+            Toast.makeText(this, "已清空回收站（" + n + " 项）", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+            refreshStorageLabel();
+        }));
+        btns.addView(updateTextButton("关闭", v -> dialog.dismiss()));
+        dialog.show();
+    }
+
+    // ==================== 通知管理 ====================
+
+    private static final String PREF_NOTIFY_NEW_VERSION = "notify_new_version";
+    private static final String PREF_NOTIFY_DOWNLOAD_DONE = "notify_download_done";
+
+    private void refreshNotificationLabel() {
+        if (settingsView == null) return;
+        TextView tv = settingsView.findViewById(R.id.tv_notification_state);
+        if (tv == null) return;
+        boolean a = prefs.getBoolean(PREF_NOTIFY_NEW_VERSION, true);
+        boolean b = prefs.getBoolean(PREF_NOTIFY_DOWNLOAD_DONE, true);
+        boolean c = prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true);
+        int on = (a ? 1 : 0) + (b ? 1 : 0) + (c ? 1 : 0);
+        tv.setText(on == 3 ? "全部开启" : (on == 0 ? "全部关闭" : on + " 项开启"));
+    }
+
+    /** 通知管理：更新相关提醒的开关 */
+    private void showNotificationSettingsDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "🔔 通知管理"));
+
+        addNotifySwitch(box, PREF_AUTO_CHECK_UPDATE, true,
+                "启动时检查更新", "进入软件后立即静默检查新版本");
+        addNotifySwitch(box, PREF_NOTIFY_NEW_VERSION, true,
+                "发现新版本时提示", "检查到新版本后弹窗询问是否更新");
+        addNotifySwitch(box, PREF_NOTIFY_DOWNLOAD_DONE, true,
+                "下载完成时提示", "更新包下载并校验完成后提醒");
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+        android.app.Dialog d = ModuleUiKit.glassDialog(this, box);
+        btns.addView(updateTextButton("完成", v -> {
+            d.dismiss();
+            refreshNotificationLabel();
+            refreshUpdateViewIfVisible();
+        }));
+        d.show();
+    }
+
+    private void addNotifySwitch(LinearLayout parent, final String key, boolean def,
+                                 String title, String desc) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        int pad = dp2(6);
+        row.setPadding(pad, dp2(10), pad, dp2(10));
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        TextView t1 = new TextView(this);
+        t1.setText(title);
+        t1.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        t1.setTextColor(ModuleUiKit.color(this, com.google.android.material.R.attr.colorOnSurface));
+        TextView t2 = new TextView(this);
+        t2.setText(desc);
+        t2.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        t2.setTextColor(ModuleUiKit.color(this,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        col.addView(t1);
+        col.addView(t2);
+        row.addView(col, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        com.google.android.material.switchmaterial.SwitchMaterial sw =
+                new com.google.android.material.switchmaterial.SwitchMaterial(this);
+        sw.setChecked(prefs.getBoolean(key, def));
+        sw.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean(key, checked).apply());
+        row.addView(sw);
+        parent.addView(row);
+    }
+
+    /** 更新页可见时同步刷新（通知开关会改变其内容） */
+    private void refreshUpdateViewIfVisible() {
+        if (updateView != null && updateView.getParent() != null) renderUpdateView();
+    }
 
     private File updateCacheDir() {
         return getExternalCacheDir() != null ? getExternalCacheDir() : getCacheDir();
@@ -2486,6 +2681,9 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     cleanUpdateCache(ftarget);   // 只保留刚下载的这版
                     renderUpdateView();
+                    if (prefs.getBoolean(PREF_NOTIFY_DOWNLOAD_DONE, true)) {
+                        Toast.makeText(this, "更新包已下载并校验完成", Toast.LENGTH_SHORT).show();
+                    }
                     installApk(ftarget);
                 }
             });

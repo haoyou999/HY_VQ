@@ -91,7 +91,8 @@
             <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_settings" android:contentDescription="存储" android:padding="9dp" android:tint="?attr/colorSecondary" />
         </com.google.android.material.card.MaterialCardView>
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" android:text="存储管理" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="待开发" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/tv_storage_state"
+            android:text="" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
         <ImageView android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_chevron_right" android:contentDescription="进入" />
     </LinearLayout>
     <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
@@ -102,7 +103,8 @@
             <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/ic_chat" android:contentDescription="通知" android:padding="9dp" android:tint="?attr/colorSecondary" />
         </com.google.android.material.card.MaterialCardView>
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="14dp" android:text="通知管理" android:textAppearance="?attr/textAppearanceBodyMedium" android:textColor="?attr/colorOnSurface" />
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="待开发" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/tv_notification_state"
+            android:text="" android:textAppearance="?attr/textAppearanceBodySmall" android:textColor="?attr/colorOnSurfaceVariant" android:layout_marginEnd="8dp" />
         <ImageView android:layout_width="18dp" android:layout_height="18dp" android:src="@drawable/ic_chevron_right" android:contentDescription="进入" />
     </LinearLayout>
     <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="?attr/colorOutlineVariant" />
