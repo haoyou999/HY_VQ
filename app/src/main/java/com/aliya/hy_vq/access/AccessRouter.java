@@ -32,11 +32,24 @@ public final class AccessRouter {
 
         String p = normalize(path);
 
-        // ── 特殊路径优先路由（虚拟层） ──
-        if (p.equals("/")) return RootVirtualStrategy.listRoot();
-        if (p.equals("/data")) return RootVirtualStrategy.listData();
-        if (p.equals(PkgStrategy.APP_DIR)) return PkgStrategy.listAppDir(ctx);
-        if (PkgStrategy.isPackageTop(p)) return PkgStrategy.listPackageTop(ctx, p);
+        // ── ⭐ v2.8.0 Root 优先路由 ──
+        // 已授权 root 时，系统路径（/、/data/xx、/system…）直接用 root 真实列出：
+        // 既绕过 scoped storage 限制，也跳过虚拟白名单层（看到真实内容，对齐
+        // MT 管理器 root 模式）。App 自己读得到的 /data/media 仍走普通路径
+        // （RootFs.preferRoot 已排除），日常目录性能不受影响。
+        final boolean rootOn = RootShell.isGranted();
+        if (rootOn && RootFs.preferRoot(p)) {
+            List<FileEntry> rl = RootFs.list(p);
+            if (rl != null) return AccessResult.ok(rl, "Root");
+        }
+
+        // ── 特殊路径优先路由（虚拟层）：仅在无 root 时生效 ──
+        if (!rootOn) {
+            if (p.equals("/")) return RootVirtualStrategy.listRoot();
+            if (p.equals("/data")) return RootVirtualStrategy.listData();
+            if (p.equals(PkgStrategy.APP_DIR)) return PkgStrategy.listAppDir(ctx);
+            if (PkgStrategy.isPackageTop(p)) return PkgStrategy.listPackageTop(ctx, p);
+        }
         if (p.equals(StorageStrategy.STORAGE_DIR)) return StorageStrategy.listVolumes(ctx);
         if (p.equals(StorageStrategy.STORAGE_DIR + "/emulated")) return StorageStrategy.listEmulated(ctx);
 
@@ -49,6 +62,11 @@ public final class AccessRouter {
                 out.add(toEntry(c));
             }
             return AccessResult.ok(out, "Real");
+        }
+        // ── Root 回退：App 读不了（listFiles 返回 null）→ 交给 root 再试一次 ──
+        if (rootOn) {
+            List<FileEntry> rl = RootFs.list(p);
+            if (rl != null) return AccessResult.ok(rl, "Root");
         }
         // 无权限且无虚拟信息 → 静默空（对齐 MT 空列表行为，不报错）
         return AccessResult.denied("Real");

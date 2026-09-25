@@ -40,6 +40,8 @@ import com.aliya.hy_vq.access.AccessResult;
 import com.aliya.hy_vq.access.AccessRouter;
 import com.aliya.hy_vq.access.AccessUtil;
 import com.aliya.hy_vq.access.FileEntry;
+import com.aliya.hy_vq.access.RootFs;
+import com.aliya.hy_vq.access.RootShell;
 import com.aliya.hy_vq.access.SafStrategy;
 import com.aliya.hy_vq.filemgr.FileListAdapter;
 import com.aliya.hy_vq.filemgr.FileOps;
@@ -129,6 +131,8 @@ public class FileManagerModule extends HyVqModule {
      *  2026-08-17 升级：encoding 可变（编码选择保存）、lineEnding（LF/CRLF）、undo/redo 快照栈 */
     private static final class EditorTabState {
         final File file;
+        /** ⭐ v2.8.0 Root 编辑：非空表示这是 root 文件的缓存副本，保存后需写回该真实路径 */
+        final String rootTarget;
         String content;
         String savedContent;
         boolean dirty;
@@ -138,7 +142,12 @@ public class FileManagerModule extends HyVqModule {
         final java.util.ArrayList<String> redoStack = new java.util.ArrayList<>();
 
         EditorTabState(File file, String content, String encoding) {
+            this(file, content, encoding, null);
+        }
+
+        EditorTabState(File file, String content, String encoding, String rootTarget) {
             this.file = file;
+            this.rootTarget = rootTarget;
             this.content = content;
             this.savedContent = content;
             this.dirty = false;
@@ -239,6 +248,12 @@ public class FileManagerModule extends HyVqModule {
     private boolean multiMode = false;
 
     private TextView pathText, statusText;
+    /** ⭐ v2.8.0 ROOT 顶栏按钮（状态着色：已授权=主色） */
+    private ImageView rootBtn;
+    /** 上一次已知的 root 状态，用于状态变化时只刷新一次 UI */
+    private int lastRootState = RootShell.STATE_UNKNOWN;
+    /** 曾经授权成功过的标记：决定启动时是"静默探测"还是"什么都不做"（避免每次冷启动弹授权窗） */
+    private static final String PREF_ROOT_EVER = "root_ever_granted";
     private LinearLayout clipBar, opBar;
     private TextView clipInfo;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -257,6 +272,8 @@ public class FileManagerModule extends HyVqModule {
         if (context instanceof Activity) hostActivity = (Activity) context;
         activeInstance = this;
         restoreState();
+        // ⭐ v2.8.0 启动即静默探测 root（3 秒超时、不弹窗打扰；已授权则点亮顶栏图标）
+        detectRootAsync(false);
     }
 
     @Override
@@ -433,6 +450,10 @@ public class FileManagerModule extends HyVqModule {
         caretLp.setMarginEnd(dp(4));
         crumb.addView(caret, caretLp);
 
+        // ⭐ v2.8.0 ROOT 入口（状态着色；点击弹出 ROOT 面板：申请授权/root 目录/挂载读写）
+        rootBtn = toolIcon(R.drawable.ic_root, v -> showRootPanel());
+        bar.addView(rootBtn);
+        refreshRootButton();
         // 🔍 搜索直达（原 ⋮ 菜单内入口，MaterialFiles/Amaze 顶栏搜索位）
         bar.addView(toolIcon(R.drawable.ic_search, v -> showSearchDialog()));
         // 排序直达（名称/大小/时间，Popover 弹出）
@@ -440,6 +461,589 @@ public class FileManagerModule extends HyVqModule {
         // ⋮ 更多（隐藏文件/书签/任务队列/刷新）
         bar.addView(toolIcon(R.drawable.ic_more_vert, v -> showMoreMenu(v)));
         return bar;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // ⭐ v2.8.0 ROOT 权限与功能
+    //
+    // 本机实测基线（Android 16 / Magisk + susfs4ksu，2026-09）：
+    //  · su = /system/bin/su；su -c 单次约 19ms（授权已记住）→ 一命令一进程足够快
+    //  · su 会话域 u:r:magisk:s0，可读 /data/data 等 App 私有目录
+    //  · root 建在 App 私有目录的文件缺 SELinux categories，必须 restorecon（见 RootFs.relayToCache）
+    //  · /system 是 system-as-root（非独立挂载点）+ erofs 只读 → remount 如实报错，不假装成功
+    // ════════════════════════════════════════════════════════════════
+
+    /** ROOT 快捷目录（标签 + 路径 + 说明） */
+    private static final String[][] ROOT_DIRS = {
+            {"/", "根目录", "真实全盘根（跳过虚拟白名单层）"},
+            {"/data", "应用数据", "所有应用数据总目录"},
+            {"/data/data", "私有数据", "各应用内部存储（含数据库/偏好）"},
+            {"/data/adb", "Magisk 数据", "模块 / 授权库 / 策略"},
+            {"/data/local/tmp", "本地临时", "shell 可写临时目录"},
+            {"/data/system", "系统配置", "账户 / 电池 / 通知等数据库"},
+            {"/data/app", "应用安装包", "已安装应用的真实目录"},
+            {"/system", "系统分区", "只读镜像（erofs）"},
+            {"/vendor", "厂商分区", "驱动 / 厂商配置"},
+            {"/product", "产品分区", "预装应用"},
+    };
+
+    /** ROOT 按钮状态着色：已授权 = 主色；未授权/无 su = 次要色 + 半透明 */
+    private void refreshRootButton() {
+        if (rootBtn == null) return;
+        int granted = ModuleUiKit.color(ctx, com.google.android.material.R.attr.colorPrimary);
+        int normal = ModuleUiKit.color(ctx, com.google.android.material.R.attr.colorOnSurfaceVariant);
+        rootBtn.setColorFilter(RootShell.isGranted() ? granted : normal);
+        rootBtn.setAlpha(RootShell.isGranted() ? 1f : 0.72f);
+    }
+
+    /**
+     * 后台探测 root 状态。
+     *
+     * @param userInitiated true = 用户主动点「申请授权」（会弹 Magisk 授权窗，等 60 秒）；
+     *                      false = 静默探测（3 秒超时，不打扰用户）
+     */
+    private void detectRootAsync(final boolean userInitiated) {
+        // 首次启动（从未授权过）时**不执行 su**：否则 Magisk 会立刻弹授权窗，打扰用户。
+        // 授权过一次的设备走真正的探测——Magisk 已记住授权，静默通过（约 20ms），无感恢复 root。
+        final boolean everGranted;
+        try {
+            everGranted = fmPrefs().getBoolean(PREF_ROOT_EVER, false);
+        } catch (Throwable t) {
+            return;   // 尚未 attach（ctx 未就绪），本轮不探测
+        }
+        new Thread(() -> {
+            final int st;
+            if (userInitiated) {
+                st = RootShell.request();
+            } else if (everGranted) {
+                st = RootShell.detect();
+            } else {
+                st = RootShell.silentDetect();
+            }
+            final boolean justGranted = st == RootShell.STATE_GRANTED
+                    && lastRootState != RootShell.STATE_GRANTED;
+            if (st == RootShell.STATE_GRANTED && !everGranted) {
+                fmPrefs().edit().putBoolean(PREF_ROOT_EVER, true).apply();
+            }
+            lastRootState = st;
+            handler.post(() -> {
+                refreshRootButton();
+                if (justGranted) {
+                    ModuleUiKit.toast(ctx, "ROOT 已授权：系统路径将以 root 身份浏览");
+                    reloadAll();   // 当前若在 /、/data 等路径，重新加载才能看到真实内容
+                } else if (userInitiated && st != RootShell.STATE_GRANTED) {
+                    ModuleUiKit.toast(ctx, st == RootShell.STATE_NONE
+                            ? "未检测到 su（本机未 root）"
+                            : "未获得授权：请在 Magisk 弹窗选「允许」，或到 Magisk→超级用户 手动开启");
+                }
+            });
+        }, "HyVqRootProbe").start();
+    }
+
+    /** 该路径的读写是否必须走 root（App 自身无权限） */
+    private static boolean needRoot(String path) {
+        if (path == null || path.isEmpty() || path.startsWith("content://")) return false;
+        if (!RootShell.isGranted()) return false;
+        if (RootFs.preferRoot(path)) return true;
+        try {
+            return !new File(path).canRead();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** ROOT 面板状态描述文字 */
+    private String rootStateText() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("状态：").append(RootShell.stateLabel()).append('\n');
+        String su = RootShell.suBinary();
+        boolean located = su != null && su.startsWith("/");
+        sb.append("su：").append(su == null ? "未找到"
+                : (located ? su : "PATH 中的 su（未定位到文件）")).append('\n');
+        switch (RootShell.state()) {
+            case RootShell.STATE_GRANTED:
+                sb.append("系统路径（/、/data、/system…）以 root 真实列出；\n")
+                        .append("增删改、权限/属主修改、分区挂载均可用。\n")
+                        .append("内部存储等普通目录仍走 App 自身权限，速度不受影响。");
+                break;
+            case RootShell.STATE_DENIED:
+                sb.append("未授权（或本机无 su）。点「申请 ROOT 权限」后在弹窗选「允许」；\n")
+                        .append("若已永久拒绝：Magisk / Root 管理 → 超级用户 → 为 HY_VQ 打开开关。");
+                break;
+            case RootShell.STATE_NONE:
+                sb.append("本机未检测到 su（未 root 或 root 方案未暴露 su）。\n")
+                        .append("文件管理仍可用，但无法访问 /data、/system 等受保护路径。");
+                break;
+            default:
+                sb.append("尚未检测。点「申请 ROOT 权限」或「重新检测」。");
+                break;
+        }
+        return sb.toString();
+    }
+
+    /** ROOT 面板：状态 / 申请授权 / root 目录快捷入口 / 分区挂载 */
+    private void showRootPanel() {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "ROOT 权限"));
+
+        final TextView stateTv = new TextView(ctx);
+        stateTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        stateTv.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        stateTv.setLineSpacing(0, 1.3f);
+        stateTv.setPadding(dp(4), dp(2), dp(4), dp(6));
+        stateTv.setText(rootStateText());
+        box.addView(stateTv);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
+
+        addMenuRow(box, "申请 ROOT 权限", R.drawable.ic_root, true, v -> {
+            dialog.dismiss();
+            ModuleUiKit.toast(ctx, "正在请求 ROOT 授权…");
+            detectRootAsync(true);
+        });
+        addMenuRow(box, "重新检测状态", R.drawable.ic_refresh, true, v -> {
+            dialog.dismiss();
+            RootShell.reset();
+            detectRootAsync(true);
+        });
+
+        if (!RootShell.isGranted()) {
+            // 未授权时也给出「先看看有哪些系统目录」，避免用户以为功能不存在
+            box.addView(subHeader("ROOT 目录（需授权后可用）"));
+            for (final String[] d : ROOT_DIRS) {
+                addMenuRow(box, d[1] + "    " + d[0], R.drawable.ic_folder, false, v -> {
+                });
+            }
+            dialog.show();
+            return;
+        }
+
+        // ── 已授权：root 目录快捷入口 ──
+        box.addView(subHeader("ROOT 目录"));
+        for (final String[] d : ROOT_DIRS) {
+            addMenuRow(box, d[1] + "    " + d[0], R.drawable.ic_folder, true, v -> {
+                dialog.dismiss();
+                openRootPath(d[0]);
+            });
+        }
+
+        // ── 分区挂载 ──
+        box.addView(subHeader("系统分区"));
+        addMenuRow(box, "挂载 / 为可读写", R.drawable.ic_save, true, v -> {
+            dialog.dismiss();
+            remountAsync("/", true);
+        });
+        addMenuRow(box, "恢复 / 为只读", R.drawable.ic_save, true, v -> {
+            dialog.dismiss();
+            remountAsync("/", false);
+        });
+        addMenuRow(box, "查看挂载状态", R.drawable.ic_info, true, v -> {
+            dialog.dismiss();
+            showMountStatusAsync();
+        });
+        addMenuRow(box, "清理 root 中转缓存", R.drawable.ic_trash, true, v -> {
+            dialog.dismiss();
+            new Thread(() -> {
+                RootFs.clearRelayCache(ctx);
+                handler.post(() -> ModuleUiKit.toast(ctx, "已清理 root 中转缓存"));
+            }, "HyVqRootCache").start();
+        });
+        dialog.show();
+    }
+
+    /** 面板内小标题（比 sectionHeader 更轻） */
+    private TextView subHeader(String text) {
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        tv.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorPrimary));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        lp.bottomMargin = dp(2);
+        lp.leftMargin = dp(4);
+        tv.setLayoutParams(lp);
+        return tv;
+    }
+
+    /** 跳到 root 路径（跨窗格保持当前导航历史语义，与分类入口一致） */
+    private void openRootPath(String path) {
+        if (active == null) return;
+        if (!RootShell.isGranted()) {
+            ModuleUiKit.toast(ctx, "需要 ROOT 权限：请先在 ROOT 面板申请授权");
+            return;
+        }
+        active.navPrev = active.path;
+        active.path = path;
+        reload(active);
+    }
+
+    private void remountAsync(final String mountPoint, final boolean rw) {
+        ModuleUiKit.toast(ctx, rw ? "正在尝试挂载为可读写…" : "正在恢复只读…");
+        new Thread(() -> {
+            final String msg = rw ? RootFs.remountRw(mountPoint) : RootFs.remountRo(mountPoint);
+            handler.post(() -> showRootResult(rw ? "挂载可读写" : "恢复只读", msg));
+        }, "HyVqRootMount").start();
+    }
+
+    /** 汇总 /proc/mounts 里主要分区状态（供用户确认 remount 是否真的生效） */
+    private void showMountStatusAsync() {
+        new Thread(() -> {
+            StringBuilder sb = new StringBuilder();
+            String[] mps = {"/", "/system", "/vendor", "/product", "/data", "/metadata"};
+            for (String mp : mps) {
+                String st = RootFs.mountState(mp);
+                sb.append(mp).append("：").append(st == null ? "非独立挂载点" : st).append('\n');
+            }
+            final String msg = sb.toString().trim();
+            handler.post(() -> showRootResult("挂载状态", msg));
+        }, "HyVqRootMountInfo").start();
+    }
+
+    /** root 操作结果对话框（多行文本 + 关闭） */
+    private void showRootResult(String title, String message) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, title));
+        TextView tv = new TextView(ctx);
+        tv.setText(message);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        tv.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface));
+        tv.setLineSpacing(0, 1.3f);
+        tv.setPadding(dp(4), dp(2), dp(4), dp(6));
+        tv.setTextIsSelectable(true);
+        box.addView(tv);
+        LinearLayout btns = new LinearLayout(ctx);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
+        btns.addView(textButton("关闭", v -> dialog.dismiss()));
+        dialog.show();
+    }
+
+    /**
+     * 用内置查看器/编辑器打开 root 文件。
+     *
+     * <p>App 进程读不了 root 文件，故先 {@link RootFs#relayToCache} 落到 App 缓存
+     * （内部带 restorecon 补 SELinux 类别，否则 App 仍读不了），再交给原内置流程。
+     * 文本文件编辑保存时由 {@link #saveEditorTab} 写回真实路径。</p>
+     */
+    private void openRootFile(final String rootPath, final String name, final String ext) {
+        ModuleUiKit.toast(ctx, "正在读取（root）…");
+        new Thread(() -> {
+            final File cached = RootFs.relayToCache(ctx, rootPath);
+            handler.post(() -> {
+                if (cached == null) {
+                    ModuleUiKit.toast(ctx, "读取失败：文件不可读或无权限");
+                    return;
+                }
+                final String cp = cached.getAbsolutePath();
+                if (IMAGE_EXTS.contains(ext)) {
+                    openImageViewer(cp, name, false);
+                } else if (AUDIO_ONLY_EXTS.contains(ext)) {
+                    // root 目录列不出同级播放列表（App 无权限）→ 单曲播放
+                    java.util.ArrayList<String> list = new java.util.ArrayList<>();
+                    list.add(cp);
+                    showAudioPlayerDialog(list, 0, false);
+                } else if (MEDIA_EXTS.contains(ext)) {
+                    openWithBuiltInPlayer(cp, name, false);
+                } else if (isTextFile(name)) {
+                    openTextEditorInternal(cached, rootPath);
+                } else {
+                    showOpenWithDialog(cp, name, false);
+                }
+            });
+        }, "HyVqRootOpen").start();
+    }
+
+    /** 目标目录中求可用名（root 目标走 RootFs.exists；App 侧对 root 目录恒判定"不存在"会静默覆盖） */
+    private static String uniqueNameRootAware(String dest, String name) {
+        if (!needRoot(dest)) return uniqueName(dest, name, null);
+        String base = name;
+        String ext = "";
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            base = name.substring(0, dot);
+            ext = name.substring(dot);
+        }
+        String cand = name;
+        int i = 1;
+        while (i < 1000 && RootFs.exists(new File(dest, cand).getAbsolutePath())) {
+            cand = base + " (" + i + ")" + ext;
+            i++;
+        }
+        return cand;
+    }
+
+    /** ⭐ v2.8.0 侧边栏 ROOT 分组：已授权 → 系统路径快捷入口；未授权 → 一行申请入口 */
+    private void buildRootNavSection(LinearLayout content) {
+        final boolean granted = RootShell.isGranted();
+        TextView head = new TextView(ctx);
+        head.setText(granted ? "ROOT（已授权）" : "ROOT");
+        head.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        head.setTypeface(null, android.graphics.Typeface.BOLD);
+        head.setTextColor(ModuleUiKit.color(ctx, granted
+                ? com.google.android.material.R.attr.colorPrimary
+                : com.google.android.material.R.attr.colorOnSurfaceVariant));
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hlp.topMargin = dp(10);
+        hlp.bottomMargin = dp(4);
+        hlp.leftMargin = dp(4);
+        content.addView(head, hlp);
+
+        if (!granted) {
+            TextView tip = new TextView(ctx);
+            tip.setText("未授权（" + RootShell.stateLabel() + "）· 点击申请");
+            tip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            tip.setTextColor(ModuleUiKit.color(ctx,
+                    com.google.android.material.R.attr.colorPrimary));
+            tip.setPadding(dp(10), dp(9), dp(10), dp(9));
+            tip.setClickable(true);
+            tip.setBackground(ModuleUiKit.rounded(ctx, dp(10),
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorSurfaceContainerLow),
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorOutlineVariant)));
+            tip.setOnClickListener(v -> {
+                closeNavSidebar();
+                showRootPanel();
+            });
+            content.addView(tip);
+            return;
+        }
+
+        for (final String[] d : ROOT_DIRS) {
+            LinearLayout row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(8), dp(6), dp(6), dp(6));
+            row.setClickable(true);
+            android.graphics.drawable.GradientDrawable g = ModuleUiKit.rounded(ctx, 0,
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorSurfaceContainerLow),
+                    ModuleUiKit.color(ctx,
+                            com.google.android.material.R.attr.colorOutlineVariant));
+            g.setCornerRadii(new float[]{dp(12), dp(12), dp(12), dp(12),
+                    dp(12), dp(12), dp(12), dp(12)});
+            row.setBackground(g);
+            row.setOnClickListener(v -> {
+                closeNavSidebar();
+                openRootPath(d[0]);
+            });
+            ImageView ic = new ImageView(ctx);
+            ic.setImageResource(R.drawable.ic_root);
+            ic.setColorFilter(ModuleUiKit.color(ctx,
+                    com.google.android.material.R.attr.colorPrimary));
+            int sz = dp(16);
+            row.addView(ic, new LinearLayout.LayoutParams(sz, sz));
+
+            LinearLayout col = new LinearLayout(ctx);
+            col.setOrientation(LinearLayout.VERTICAL);
+            TextView t1 = new TextView(ctx);
+            t1.setText(d[1]);
+            t1.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            t1.setTextColor(ModuleUiKit.color(ctx,
+                    com.google.android.material.R.attr.colorOnSurface));
+            TextView t2 = new TextView(ctx);
+            t2.setText(d[0] + " · " + d[2]);
+            t2.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+            t2.setAlpha(0.7f);
+            t2.setSingleLine(true);
+            t2.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            t2.setTextColor(ModuleUiKit.color(ctx,
+                    com.google.android.material.R.attr.colorOnSurfaceVariant));
+            col.addView(t1);
+            col.addView(t2);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            clp.setMarginStart(dp(8));
+            row.addView(col, clp);
+
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rlp.bottomMargin = dp(4);
+            content.addView(row, rlp);
+        }
+    }
+
+    /** ⭐ v2.8.0 root：修改权限（chmod 数字模式 + 常用预设 + 递归开关） */
+    private void showChmodDialog(final FileEntry e) {
+        if (!RootShell.isGranted()) {
+            ModuleUiKit.toast(ctx, "需要 ROOT 权限");
+            return;
+        }
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "修改权限"));
+
+        final TextView cur = new TextView(ctx);
+        cur.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        cur.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        cur.setPadding(dp(4), 0, dp(4), dp(6));
+        cur.setLineSpacing(0, 1.3f);
+        cur.setText(e.name + "\n读取中…");
+        box.addView(cur);
+
+        final EditText input = new EditText(ctx);
+        input.setHint("数字权限，如 644 / 755 / 600");
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        box.addView(input);
+
+        LinearLayout presets = new LinearLayout(ctx);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        presets.setGravity(Gravity.CENTER_VERTICAL);
+        box.addView(presets);
+        for (final String pv : new String[]{"644", "755", "600", "700", "777"}) {
+            presets.addView(textButton(pv, v -> input.setText(pv)));
+        }
+
+        final android.widget.CheckBox recursive = new android.widget.CheckBox(ctx);
+        recursive.setText("递归应用到子项（chmod -R）");
+        recursive.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        recursive.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface));
+        box.addView(recursive);
+
+        LinearLayout btns = new LinearLayout(ctx);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
+        btns.addView(textButton("取消", v -> dialog.dismiss()));
+        btns.addView(textButton("应用", v -> {
+            final String mode = input.getText().toString().trim();
+            if (!RootShell.validMode(mode)) {
+                ModuleUiKit.toast(ctx, "权限格式不合法（2~4 位八进制，如 644）");
+                return;
+            }
+            dialog.dismiss();
+            final String path = e.path;
+            final String ename = e.name;
+            final boolean rec = recursive.isChecked();
+            runTask(() -> {
+                final boolean ok = RootFs.chmod(path, mode, rec);
+                handler.post(() -> {
+                    ModuleUiKit.toast(ctx, ok ? ("已设置权限 " + mode + "：" + ename)
+                            : "修改权限失败（root）");
+                    reloadAll();
+                });
+            });
+        }));
+        dialog.show();
+
+        new Thread(() -> {
+            final RootFs.Stat st = RootFs.stat(e.path);
+            handler.post(() -> {
+                if (st == null) {
+                    cur.setText(e.name + "\n当前权限：读取失败");
+                    return;
+                }
+                cur.setText(e.name + "\n当前：" + st.mode + "  " + st.perms
+                        + "\n属主：" + st.owner + " (" + st.uid + ")    组："
+                        + st.group + " (" + st.gid + ")");
+                input.setText(st.mode);
+                try {
+                    input.setSelection(input.getText().length());
+                } catch (Throwable ignored) {
+                }
+            });
+        }, "HyVqRootStat").start();
+    }
+
+    /** ⭐ v2.8.0 root：修改属主（chown user:group 或 uid:gid + 递归开关） */
+    private void showChownDialog(final FileEntry e) {
+        if (!RootShell.isGranted()) {
+            ModuleUiKit.toast(ctx, "需要 ROOT 权限");
+            return;
+        }
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(ctx, "修改属主"));
+
+        final TextView cur = new TextView(ctx);
+        cur.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        cur.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        cur.setPadding(dp(4), 0, dp(4), dp(6));
+        cur.setLineSpacing(0, 1.3f);
+        cur.setText(e.name + "\n读取中…");
+        box.addView(cur);
+
+        final EditText input = new EditText(ctx);
+        input.setHint("属主，如 0:0 或 root:shell");
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        box.addView(input);
+
+        LinearLayout presets = new LinearLayout(ctx);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        presets.setGravity(Gravity.CENTER_VERTICAL);
+        box.addView(presets);
+        for (final String pv : new String[]{"0:0", "1000:1000", "2000:2000", "root:root"}) {
+            presets.addView(textButton(pv, v -> input.setText(pv)));
+        }
+
+        final android.widget.CheckBox recursive = new android.widget.CheckBox(ctx);
+        recursive.setText("递归应用到子项（chown -R）");
+        recursive.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        recursive.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurface));
+        box.addView(recursive);
+
+        LinearLayout btns = new LinearLayout(ctx);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        box.addView(btns);
+
+        final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
+        btns.addView(textButton("取消", v -> dialog.dismiss()));
+        btns.addView(textButton("应用", v -> {
+            final String owner = input.getText().toString().trim();
+            if (!RootShell.validOwner(owner)) {
+                ModuleUiKit.toast(ctx, "属主格式不合法（user 或 user:group）");
+                return;
+            }
+            dialog.dismiss();
+            final String path = e.path;
+            final String ename = e.name;
+            final boolean rec = recursive.isChecked();
+            runTask(() -> {
+                final boolean ok = RootFs.chown(path, owner, rec);
+                handler.post(() -> {
+                    ModuleUiKit.toast(ctx, ok ? ("已设置属主 " + owner + "：" + ename)
+                            : "修改属主失败（root）");
+                    reloadAll();
+                });
+            });
+        }));
+        dialog.show();
+
+        new Thread(() -> {
+            final RootFs.Stat st = RootFs.stat(e.path);
+            handler.post(() -> {
+                if (st == null) {
+                    cur.setText(e.name + "\n当前属主：读取失败");
+                    return;
+                }
+                cur.setText(e.name + "\n当前属主：" + st.owner + ":" + st.group
+                        + "  (" + st.uid + ":" + st.gid + ")");
+                input.setText(st.uid + ":" + st.gid);
+                try {
+                    input.setSelection(input.getText().length());
+                } catch (Throwable ignored) {
+                }
+            });
+        }, "HyVqRootStat").start();
     }
 
     /** ⭐10 面包屑路径（MaterialFiles 风格）：点击顶栏路径弹出层级列表，任选一级直接跳转。
@@ -1003,7 +1607,9 @@ public class FileManagerModule extends HyVqModule {
             // 原始（未过滤）条目快照，跳过 AccessRouter.list；指纹 = mtime + 子项数。
             // 过滤/置顶/排序仍在下方统一执行（缓存与显示解耦，隐藏开关切换永远正确）。
             boolean fromCache = false;
-            if (!p.path.startsWith("content://")) {
+            // ⭐ v2.8.0 root 路径禁用目录缓存：root 目录在 App 侧的 lastModified()/
+            // listFiles() 恒为 0/null，指纹永远相同 → 目录内容变了仍会显示旧快照
+            if (!p.path.startsWith("content://") && !needRoot(p.path)) {
                 DirSnapshot snap = p.dirCache.get(p.path);
                 File dirF = new File(p.path);
                 long mt = dirF.lastModified();
@@ -1021,7 +1627,7 @@ public class FileManagerModule extends HyVqModule {
                 p.lastResult = AccessRouter.list(ctx, p.path);
                 p.entries.clear();
                 p.entries.addAll(p.lastResult.entries);
-                if (!p.path.startsWith("content://")) {
+                if (!p.path.startsWith("content://") && !needRoot(p.path)) {
                     File dirF = new File(p.path);
                     p.dirCache.put(p.path, new DirSnapshot(
                             new ArrayList<>(p.entries), dirF.lastModified(),
@@ -1333,6 +1939,16 @@ public class FileManagerModule extends HyVqModule {
             dialog.dismiss();
             onItemMenu(p, e, "属性");
         });
+        // ⭐ v2.8.0 root 专属：修改权限 / 属主（仅已授权 root、且为真实存在的条目）
+        boolean rootable = realOnly && RootShell.isGranted();
+        addMenuRow(box, "修改权限", R.drawable.ic_settings, rootable, v -> {
+            dialog.dismiss();
+            onItemMenu(p, e, "修改权限");
+        });
+        addMenuRow(box, "修改属主", R.drawable.ic_settings, rootable, v -> {
+            dialog.dismiss();
+            onItemMenu(p, e, "修改属主");
+        });
         addMenuRow(box, "添加书签", R.drawable.ic_star, realOnly, v -> {
             dialog.dismiss();
             onItemMenu(p, e, "添加书签");
@@ -1392,6 +2008,12 @@ public class FileManagerModule extends HyVqModule {
                 break;
             case "属性":
                 showPropertyDialog(e);
+                break;
+            case "修改权限":
+                if (real) showChmodDialog(e);
+                break;
+            case "修改属主":
+                if (real) showChownDialog(e);
                 break;
             case "添加书签":
                 addBookmarkPath(e.path);
@@ -1540,6 +2162,16 @@ public class FileManagerModule extends HyVqModule {
                             if (okOp && cut && srcSaf) toDelete.add(p);
                         }
                         if (okOp) {
+                            ok++;
+                        } else {
+                            err.append(baseNameOf(p)).append(' ');
+                        }
+                    } else if (needRoot(p) || needRoot(dest)) {
+                        // ⭐ v2.8.0 root 参与的组合：cp -a / mv 走 root；
+                        // 重名先用 root 检测（App 侧对 root 目录恒判定为不存在，会静默覆盖）
+                        String realName = uniqueNameRootAware(dest, baseNameOf(p));
+                        String dst = new File(dest, realName).getAbsolutePath();
+                        if (cut ? RootFs.move(p, dst) : RootFs.copy(p, dst)) {
                             ok++;
                         } else {
                             err.append(baseNameOf(p)).append(' ');
@@ -1707,6 +2339,16 @@ public class FileManagerModule extends HyVqModule {
                         reload(active);
                     });
                 }, "HyVqSafCreate").start();
+            } else if (needRoot(active.path)) {
+                // ⭐ v2.8.0 root 目录：新建空文件走 root（644）
+                final String dest = new File(active.path, full).getAbsolutePath();
+                runTask(() -> {
+                    final boolean ok = RootFs.createFile(dest);
+                    handler.post(() -> {
+                        ModuleUiKit.toast(ctx, ok ? "已创建文件：" + full : "创建失败（root）");
+                        reload(active);
+                    });
+                });
             } else {
                 FileOps.createFileAsync(new File(active.path), full, (ok, msg) -> {
                     ModuleUiKit.toast(ctx, msg);
@@ -1885,6 +2527,9 @@ public class FileManagerModule extends HyVqModule {
 
         // ── 书签区（仿 ZhuFiler NavigationView 书签组：常驻可见，点击进入、长按删除） ──
         buildBookmarkSection(content);
+
+        // ── ⭐ v2.8.0 ROOT 分组（已授权时列出系统路径；未授权时一行申请入口） ──
+        buildRootNavSection(content);
 
         // ── 快速访问：分类快捷入口（参考 Her 分组导航；点击直达 cat:// 分类视图） ──
         {
@@ -2575,6 +3220,16 @@ public class FileManagerModule extends HyVqModule {
                         reload(active);
                     });
                 }, "HyVqSafMkdir").start();
+            } else if (needRoot(active.path)) {
+                // ⭐ v2.8.0 root 目录：mkdir 走 root（App 自身无写权限）
+                final String dest = new File(active.path, name).getAbsolutePath();
+                runTask(() -> {
+                    final boolean ok = RootFs.mkdirs(dest);
+                    handler.post(() -> {
+                        ModuleUiKit.toast(ctx, ok ? "已创建文件夹：" + name : "创建失败（root）");
+                        reload(active);
+                    });
+                });
             } else {
                 FileOps.mkdirAsync(new File(active.path), name, (ok, msg) -> {
                     ModuleUiKit.toast(ctx, msg);
@@ -2621,6 +3276,17 @@ public class FileManagerModule extends HyVqModule {
                         reload(active);
                     });
                 }, "HyVqSafRename").start();
+            } else if (needRoot(e.path)) {
+                // ⭐ v2.8.0 root 条目：mv 走 root
+                final String src = e.path;
+                final String dst = new File(new File(e.path).getParent(), newName).getAbsolutePath();
+                runTask(() -> {
+                    final boolean ok = RootFs.move(src, dst);
+                    handler.post(() -> {
+                        ModuleUiKit.toast(ctx, ok ? "已重命名为：" + newName : "重命名失败（root）");
+                        reload(active);
+                    });
+                });
             } else {
                 FileOps.renameAsync(new File(e.path), newName, (ok, msg) -> {
                     ModuleUiKit.toast(ctx, msg);
@@ -2669,10 +3335,21 @@ public class FileManagerModule extends HyVqModule {
         tv.setLineSpacing(0, 1.25f);
         tv.setPadding(dp(4), dp(4), dp(4), dp(4));
 
+        // ⭐ v2.8.0 root 属性：权限 / 属主 / SELinux 上下文（App 侧拿不到，需 root stat）
+        final TextView rootTv = new TextView(ctx);
+        rootTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        rootTv.setTextColor(ModuleUiKit.color(ctx,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+        rootTv.setLineSpacing(0, 1.3f);
+        rootTv.setPadding(dp(4), dp(6), dp(4), dp(4));
+        rootTv.setTextIsSelectable(true);
+        rootTv.setVisibility(View.GONE);
+
         LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
         box.addView(ModuleUiKit.sectionHeader(ctx, "属性"));
         box.addView(tv);
+        box.addView(rootTv);
 
         final android.app.Dialog dialog = ModuleUiKit.glassDialog(ctx, box);
         LinearLayout btns = new LinearLayout(ctx);
@@ -2682,6 +3359,20 @@ public class FileManagerModule extends HyVqModule {
         btns.addView(textButton("关闭", v -> dialog.dismiss()));
         dialog.show();
 
+        // root 属性异步加载（一次 su stat，约 20ms）
+        if (!e.virtual && !SafStrategy.isSafUri(e.path) && RootShell.isGranted()) {
+            rootTv.setVisibility(View.VISIBLE);
+            rootTv.setText("ROOT 属性读取中…");
+            new Thread(() -> {
+                final RootFs.Stat st = RootFs.stat(e.path);
+                handler.post(() -> rootTv.setText(st == null ? "ROOT 属性：读取失败" : (
+                        "权限：" + st.mode + "  (" + st.perms + ")\n"
+                                + "属主：" + st.owner + " (" + st.uid + ")    组："
+                                + st.group + " (" + st.gid + ")\n"
+                                + "硬链接：" + st.links + "\n"
+                                + "SELinux：" + st.selinux)));
+            }, "HyVqRootStat").start();
+        }
         // 目录大小后台计算后回填（仅真实目录；虚拟目录无真实大小，SAF 目录显示 "-"）
         if (e.isDir() && !e.virtual && !SafStrategy.isSafUri(e.path)) {
             new Thread(() -> {
@@ -2706,7 +3397,16 @@ public class FileManagerModule extends HyVqModule {
             sb.append("· ").append(items.get(i).name).append('\n');
         }
         if (items.size() > 5) sb.append("…等").append(items.size()).append("项");
-        if (!inTrash) sb.append("（将移入回收站，可恢复）");
+        if (!inTrash) {
+            boolean hasRoot = false;
+            for (FileEntry e : items) {
+                if (needRoot(e.path)) {
+                    hasRoot = true;
+                    break;
+                }
+            }
+            sb.append(hasRoot ? "（其中 root 条目将直接删除，不可恢复）" : "（将移入回收站，可恢复）");
+        }
 
         TextView tv = new TextView(ctx);
         tv.setText(sb.toString().trim());
@@ -2737,6 +3437,12 @@ public class FileManagerModule extends HyVqModule {
                             if (SafStrategy.deleteDocument(ctx, e.path)) ok++;
                         } catch (Throwable ignored) {
                         }
+                        continue;
+                    }
+                    // ⭐ v2.8.0 root 条目：App 无权限 → rm -rf 走 root
+                    //（直接物理删除，不进回收站：跨挂载点搬运大文件既慢又可能中断丢数据）
+                    if (needRoot(e.path)) {
+                        if (RootFs.delete(e.path)) ok++;
                         continue;
                     }
                     File f = new File(e.path);
@@ -2905,6 +3611,15 @@ public class FileManagerModule extends HyVqModule {
      *  多标签 + 打开保留（2026-08-16 参考 ZeroTermux EditTextActivity）：同文件复用标签，
      *  标签列表持久化到 SharedPreferences，下次打开编辑器自动恢复。 */
     private void openTextEditor(final File f) {
+        openTextEditorInternal(f, null);
+    }
+
+    /**
+     * 打开编辑器。
+     *
+     * @param rootTarget 非空 = 这是 root 文件的缓存副本，保存后需写回该真实路径
+     */
+    private void openTextEditorInternal(final File f, final String rootTarget) {
         if (!f.exists() || !f.isFile()) {
             ModuleUiKit.toast(ctx, "文件不存在");
             return;
@@ -2938,7 +3653,7 @@ public class FileManagerModule extends HyVqModule {
             ModuleUiKit.toast(ctx, "读取失败");
             return;
         }
-        EditorTabState tab = new EditorTabState(f, rc[0], rc[1]);
+        EditorTabState tab = new EditorTabState(f, rc[0], rc[1], rootTarget);
         editorTabs.add(tab);
         saveEditorTabs();
         ensureEditorDialog();
@@ -3202,6 +3917,15 @@ public class FileManagerModule extends HyVqModule {
                     bytes = out.getBytes("UTF-8");
                 }
                 fos.write(bytes);
+                // ⭐ v2.8.0 root 文件：缓存副本写好后回写真实路径。
+                // RootFs.writeLocalFile 覆盖已存在文件（cp -f 不 unlink）→
+                // 属主 / 权限 / SELinux 上下文全部保留，不会把系统文件改成 root:root 644。
+                final String rootErr;
+                if (tab.rootTarget != null && !RootFs.writeLocalFile(tab.file, tab.rootTarget)) {
+                    rootErr = "写回失败（root）：" + tab.rootTarget;
+                } else {
+                    rootErr = null;
+                }
                 handler.post(() -> {
                     tab.savedContent = tab.content;
                     tab.dirty = false;
@@ -3209,7 +3933,8 @@ public class FileManagerModule extends HyVqModule {
                         editorHeader.setText(tab.file.getName() + " · " + tab.encoding + " · "
                                 + FileOps.formatSize(tab.file.length()));
                     }
-                    ModuleUiKit.toast(ctx, "已保存：" + tab.file.getName());
+                    ModuleUiKit.toast(ctx, rootErr != null ? rootErr : "已保存："
+                            + (tab.rootTarget != null ? tab.rootTarget : tab.file.getName()));
                     renderEditorTabs();
                     reloadAll();
                     if (onDone != null) onDone.run();
@@ -3280,10 +4005,12 @@ public class FileManagerModule extends HyVqModule {
         editorWatcher = null;
     }
 
-    /** 打开保留：保存当前标签路径列表到 SharedPreferences */
+    /** 打开保留：保存当前标签路径列表（root 文件存真实路径，前缀 root:// 标记） */
     private void saveEditorTabs() {
         org.json.JSONArray arr = new org.json.JSONArray();
-        for (EditorTabState t : editorTabs) arr.put(t.file.getAbsolutePath());
+        for (EditorTabState t : editorTabs) {
+            arr.put(t.rootTarget != null ? "root://" + t.rootTarget : t.file.getAbsolutePath());
+        }
         fmPrefs().edit().putString(EDITOR_PREF_TABS, arr.toString()).apply();
     }
 
@@ -3294,7 +4021,20 @@ public class FileManagerModule extends HyVqModule {
         try {
             org.json.JSONArray arr = new org.json.JSONArray(json);
             for (int i = 0; i < arr.length(); i++) {
-                File f = new File(arr.getString(i));
+                String p = arr.getString(i);
+                // ⭐ v2.8.0 root 标签：重新中转一次缓存副本（缓存可能已被系统清理），
+                // 且必须记回 rootTarget，否则保存只写缓存副本、真实文件不更新
+                if (p.startsWith("root://")) {
+                    String rp = p.substring("root://".length());
+                    if (!RootShell.isGranted()) continue;
+                    File cached = RootFs.relayToCache(ctx, rp);
+                    if (cached == null) continue;
+                    String[] rr = readTextContent(cached);
+                    if (rr == null) continue;
+                    editorTabs.add(new EditorTabState(cached, rr[0], rr[1], rp));
+                    continue;
+                }
+                File f = new File(p);
                 if (!f.isFile() || f.length() > 2 * 1024 * 1024) continue;
                 String[] rc = readTextContent(f);
                 if (rc == null) continue;
@@ -4372,6 +5112,11 @@ public class FileManagerModule extends HyVqModule {
         final String ext = extOf(f.getName());
         final String path = f.getAbsolutePath();
         final String name = f.getName();
+        // ⭐ v2.8.0 root 文件：App 无权读 → 先中转（root → App 缓存，含 restorecon）再打开
+        if (!f.canRead() && needRoot(path)) {
+            openRootFile(path, name, ext);
+            return;
+        }
         // 格式明确且内置功能存在 → 直接调用内置功能，不弹窗打扰
         if (IMAGE_EXTS.contains(ext)) {
             openImageViewer(path, name, false);
@@ -5145,6 +5890,11 @@ public class FileManagerModule extends HyVqModule {
                     fmPrefs().edit().putBoolean(PREF_SHOW_HIDDEN, showHidden).apply();
                     ModuleUiKit.toast(ctx, showHidden ? "已显示隐藏文件" : "已隐藏 . 开头文件");
                     reloadAll();
+                });
+        addMenuRow(panel, RootShell.isGranted() ? "ROOT 工具（已授权）" : "ROOT 权限",
+                R.drawable.ic_root, v -> {
+                    popup.dismiss();
+                    showRootPanel();
                 });
         addMenuRow(panel, "书签列表", R.drawable.ic_star, v -> {
             popup.dismiss();
