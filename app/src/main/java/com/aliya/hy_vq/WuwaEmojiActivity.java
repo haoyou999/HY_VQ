@@ -52,10 +52,6 @@ public class WuwaEmojiActivity extends Activity {
     private static final String API_RANDOM =
             "https://emoji.wuwa.games/apis/api.random-emoji.wuwa.games/v1alpha1/random";
 
-    /** 服务方提供的长期稳定调用令牌（用户转交） */
-    private static final String API_TOKEN =
-            "re_75dc8a2b66824532aa45d7c04f7831a7.Xw-jYTPMfTO5sNCkIXA5umjkPWT8EaakfjqFYrVp8JA";
-
     private static final int TIMEOUT_MS = 15000;
 
     // 每日限流：远低于官方额度，主动减轻对方服务器压力
@@ -156,11 +152,12 @@ public class WuwaEmojiActivity extends Activity {
                 if (!ch.isEmpty()) {
                     sb.append("?character=").append(URLEncoder.encode(ch, "UTF-8"));
                 }
+                // 直接免鉴权调用：实测接口本身开放；官方令牌在当前环境下会被判为
+                //「API Key 无效、已停用或已过期」而返回 401，故不再携带任何鉴权头。
                 HttpURLConnection c = (HttpURLConnection) new URL(sb.toString()).openConnection();
                 c.setConnectTimeout(TIMEOUT_MS);
                 c.setReadTimeout(TIMEOUT_MS);
                 c.setRequestProperty("Accept", "application/json");
-                c.setRequestProperty("Authorization", "Bearer " + API_TOKEN);
                 int code = c.getResponseCode();
                 if (code != 200) throw new Exception("接口返回 HTTP " + code);
                 String body = readAll(c.getInputStream());
@@ -174,7 +171,6 @@ public class WuwaEmojiActivity extends Activity {
                 HttpURLConnection ic = (HttpURLConnection) new URL(imgUrl).openConnection();
                 ic.setConnectTimeout(TIMEOUT_MS);
                 ic.setReadTimeout(TIMEOUT_MS);
-                ic.setRequestProperty("Authorization", "Bearer " + API_TOKEN);
                 int icode = ic.getResponseCode();
                 if (icode != 200) throw new Exception("图片下载失败 HTTP " + icode);
                 bytes = readBytes(ic.getInputStream());
