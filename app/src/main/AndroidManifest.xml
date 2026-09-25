@@ -51,6 +51,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- 鸣潮表情包（数据来源：呜哇小站 emoji.wuwa.games，已做每日限流） -->
+        <activity
+            android:name=".WuwaEmojiActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:label="鸣潮表情包" />
+
         <!-- 内置图片查看器：图片类文件优先由本页打开 -->
         <activity
             android:name=".ImageViewerActivity"

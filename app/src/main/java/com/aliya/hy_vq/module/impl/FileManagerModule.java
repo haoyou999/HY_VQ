@@ -5793,9 +5793,17 @@ public class FileManagerModule extends HyVqModule {
             }, "HyVqFtpAccept");
             t.setDaemon(true);
             t.start();
-            String ip = localIp();
-            ModuleUiKit.toast(ctx, "FTP 已启动：" + (ip == null ? "获取IP失败"
-                    : "ftp://" + ip + ":" + FTP_PORT) + "（电脑浏览器/资源管理器访问）");
+            java.util.List<String> ips = localIps();
+            if (ips.isEmpty()) {
+                ModuleUiKit.toast(ctx, "FTP 已启动，但未获取到局域网 IP（请确认已连 WiFi）");
+            } else {
+                StringBuilder sb = new StringBuilder("FTP 已启动：ftp://" + ips.get(0) + ":" + FTP_PORT);
+                for (int i = 1; i < ips.size(); i++) {
+                    sb.append("\n备用：ftp://").append(ips.get(i)).append(":").append(FTP_PORT);
+                }
+                sb.append("\n（在电脑浏览器/资源管理器打开）");
+                ModuleUiKit.toast(ctx, sb.toString());
+            }
         } catch (Throwable t) {
             ModuleUiKit.toast(ctx, "FTP 启动失败：" + t.getMessage());
         }
@@ -5811,24 +5819,65 @@ public class FileManagerModule extends HyVqModule {
         ModuleUiKit.toast(ctx, "FTP 服务器已停止");
     }
 
-    private static String localIp() {
+    /** 虚拟/隧道类接口名关键字：这些接口即使 isUp() 也不该作为对外地址，
+     *  否则会给出电脑无法访问的 IP（如 ColorOS 的 vgate0 虚拟网关）。 */
+    private static final String[] VIRTUAL_IF_KEYWORDS = {
+            "vgate", "dummy", "ovnet", "tun", "tap", "ifb", "gre", "gretap",
+            "sit", "ip6", "ip_vti", "erspan", "p2p", "rmnet_ipa", "wifi-aware", "lo"};
+
+    private static boolean isVirtualIface(String name) {
+        if (name == null) return true;
+        String n = name.toLowerCase(Locale.getDefault());
+        for (String k : VIRTUAL_IF_KEYWORDS) {
+            if (n.contains(k)) return true;
+        }
+        return false;
+    }
+
+    /** 收集本机可供局域网访问的 IPv4（按可达性排序）。
+     *  ⭐ 修复：原实现「返回第一个非回环 IPv4」在多网卡设备上会选中虚拟网卡
+     *  （实测 vgate0=172.30.220.67 排在 wlan0 之前且状态非 down），
+     *  导致提示里给出电脑无法访问的地址 → 表现为「FTP 连不上」。
+     *  现按 WiFi → 热点 → 移动数据 → 其它 的优先级返回，并排除虚拟接口。 */
+    private static java.util.List<String> localIps() {
+        java.util.LinkedHashMap<String, String> wifi = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, String> ap = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, String> cell = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, String> other = new java.util.LinkedHashMap<>();
         try {
             for (java.util.Enumeration<java.net.NetworkInterface> en =
                  java.net.NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
                 java.net.NetworkInterface ni = en.nextElement();
-                if (!ni.isUp() || ni.isLoopback()) continue;
+                String nm = ni.getName();
+                if (nm == null || isVirtualIface(nm)) continue;
+                if (!ni.isUp()) continue;
                 for (java.util.Enumeration<java.net.InetAddress> ae = ni.getInetAddresses();
                      ae.hasMoreElements(); ) {
                     java.net.InetAddress ia = ae.nextElement();
-                    if (ia instanceof java.net.Inet4Address && !ia.isLoopbackAddress()) {
-                        String ip = ia.getHostAddress();
-                        if (ip != null && !ip.startsWith("127.")) return ip;
-                    }
+                    if (!(ia instanceof java.net.Inet4Address) || ia.isLoopbackAddress()) continue;
+                    String ip = ia.getHostAddress();
+                    if (ip == null || ip.startsWith("127.") || ip.startsWith("169.254.")) continue;
+                    String n = nm.toLowerCase(Locale.getDefault());
+                    if (n.startsWith("wlan")) wifi.put(ip, nm);
+                    else if (n.startsWith("ap") || n.startsWith("swlan") || n.contains("softap")) ap.put(ip, nm);
+                    else if (n.startsWith("rmnet") || n.startsWith("r_rmnet")) cell.put(ip, nm);
+                    else other.put(ip, nm);
                 }
             }
         } catch (Throwable ignored) {
         }
-        return null;
+        java.util.List<String> out = new java.util.ArrayList<>();
+        out.addAll(wifi.values().isEmpty() ? wifi.keySet() : wifi.keySet());
+        for (String k : ap.keySet()) if (!out.contains(k)) out.add(k);
+        for (String k : cell.keySet()) if (!out.contains(k)) out.add(k);
+        for (String k : other.keySet()) if (!out.contains(k)) out.add(k);
+        return out;
+    }
+
+    /** 单个对外 IP（优先 WiFi） */
+    private static String localIp() {
+        java.util.List<String> l = localIps();
+        return l.isEmpty() ? null : l.get(0);
     }
 
     /** 单连接 FTP 命令循环：USER/PASS 免密、PASV 被动模式、LIST/RETR/STOR/DELE/MKD/RMD */

@@ -1073,6 +1073,21 @@ public class MainActivity extends AppCompatActivity {
             binding.drawerLayout.closeDrawers();
             binding.drawerLayout.postDelayed(this::switchToHome, 160);
         });
+        // 鸣潮表情包（数据来源：呜哇小站 emoji.wuwa.games）
+        View emojiBtn = binding.navView.findViewById(R.id.nav_emoji);
+        if (emojiBtn != null) {
+            emojiBtn.setOnClickListener(v -> {
+                binding.drawerLayout.closeDrawers();
+                binding.drawerLayout.postDelayed(() -> {
+                    try {
+                        startActivity(new Intent(MainActivity.this, WuwaEmojiActivity.class));
+                    } catch (Throwable t) {
+                        Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }, 160);
+            });
+        }
         // 文件管理（内置一级功能，非模块）
         View fmBtn = binding.navView.findViewById(R.id.nav_filemgr);
         if (fmBtn != null) {
