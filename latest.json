@@ -1,9 +1,9 @@
 {
-  "versionCode": 31,
-  "versionName": "2.6.1",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.6.1/HY_VQ-v2.6.1.apk",
-  "size": 23561632,
-  "md5": "074b9717cf5009e1e541f0982b2d4cdc",
+  "versionCode": 32,
+  "versionName": "2.6.2",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.6.2/HY_VQ-v2.6.2.apk",
+  "size": 23566388,
+  "md5": "e5a401662df98e76d86de0a89a981703",
   "force": false,
-  "changelog": "· 【修复】表情包获取报 HTTP 401：应用携带了官方令牌（Authorization: Bearer），而该令牌被服务端判为「API Key 无效、已停用或已过期」\n· 经逐项实测确认：该接口本身开放，不带任何鉴权头即可正常返回；携带令牌反而是唯一的故障源\n· 现**彻底移除令牌与相关容错逻辑**，请求只保留 Accept 头，功能不再受令牌状态影响\n· 说明：当初「多种传法都返回 200」的测试具有误导性 —— 服务端只识别 Authorization 头，其余头被静默忽略，实际每次测的都是同一个无鉴权路径"
+  "changelog": "· 设置页「关于」移至选项列表最下方\n· 「退出登录」固定贴屏幕最底端，不再随设置项滚动（设置项区改为可滚动，项多时不会被挤出屏幕）\n· 关于页致谢大幅扩充：补充 MT 管理器、ZhuFiler、Amaze、Fossify、Ghost Commander、Blurry 等参考项目\n· 新增「历史参考但代码已不再使用」分区：Jetpack Media3/ExoPlayer（因离线构建改用原生实现）、pnpm 等仍一并致谢\n· 致谢区改为**可折叠**：默认展示主要条目，点「展开完整致谢」显示全部，带平滑过渡动画，避免后续致谢过长\n· 折叠按钮显示条目总数"
 }
