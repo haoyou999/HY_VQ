@@ -175,9 +175,8 @@ public class FileManagerModule extends HyVqModule {
     // ── 浏览状态持久化键（2026-09-06 补齐：排序/隐藏文件/双窗格路径原为纯内存，重启即回默认） ──
     private static final String PREF_SORT_MODE = "sort_mode";
     private static final String PREF_SHOW_HIDDEN = "show_hidden";
-    private static final String PREF_LAST_PATH_L = "last_path_l";
-    private static final String PREF_LAST_PATH_R = "last_path_r";
-    private static final String PREF_ACTIVE_PANE = "active_pane";
+    // 注：历史上有 last_path_l / last_path_r / active_pane 三项（用于恢复上次目录），
+    // 按用户要求「重启回到存储根」已停用，偏好文件中的旧键值忽略即可。
     /** 撤销快照合并控制：连续输入（<600ms 且位置连续）合并为一次快照 */
     private long lastUndoPush = 0;
     private int lastUndoStart = -1;
@@ -268,15 +267,17 @@ public class FileManagerModule extends HyVqModule {
 
     /** 恢复持久化的浏览状态（排序模式 / 是否显示隐藏文件 / 双窗格上次路径）。
      *  只在路径仍可用时套用，否则保留默认 /storage/emulated/0，避免启动进空目录。 */
+    /** 恢复**用户偏好**（排序 / 是否显示隐藏文件）。
+     *
+     *  ⚠️ 刻意**不恢复上次浏览的目录**（用户要求）：
+     *  - 重启软件 → FileManagerModule 重新构造 → 两窗格回到内部存储根 /storage/emulated/0
+     *  - 挂后台再回来 → 同一实例，路径原样保留，不会跳回根目录
+     *  这两种行为靠"实例是否重建"天然区分，无需额外标志。 */
     private void restoreState() {
         if (ctx == null) return;
         android.content.SharedPreferences sp = fmPrefs();
         sortMode = Math.max(SORT_NAME, Math.min(SORT_TIME, sp.getInt(PREF_SORT_MODE, SORT_NAME)));
         showHidden = sp.getBoolean(PREF_SHOW_HIDDEN, false);
-        String lp = sp.getString(PREF_LAST_PATH_L, "");
-        if (isRestorablePath(lp)) paneL.path = lp;
-        String rp = sp.getString(PREF_LAST_PATH_R, "");
-        if (isRestorablePath(rp)) paneR.path = rp;
     }
 
     /** 路径是否可恢复：SAF 内容 URI / 分类伪路径直接放行；普通路径要求仍存在 */
@@ -289,12 +290,10 @@ public class FileManagerModule extends HyVqModule {
     /** 持久化浏览状态（排序 / 隐藏文件 / 双窗格路径 / 活动窗格）：切换目录与 detach 时调用 */
     private void persistState() {
         if (ctx == null || paneL == null || paneR == null) return;
+        // 只持久化用户偏好；路径不再保存（重启固定回存储根，保存无意义且徒增写盘）
         fmPrefs().edit()
                 .putInt(PREF_SORT_MODE, sortMode)
                 .putBoolean(PREF_SHOW_HIDDEN, showHidden)
-                .putString(PREF_LAST_PATH_L, paneL.path)
-                .putString(PREF_LAST_PATH_R, paneR.path)
-                .putString(PREF_ACTIVE_PANE, active == paneR ? "R" : "L")
                 .apply();
     }
 
@@ -306,8 +305,8 @@ public class FileManagerModule extends HyVqModule {
         panes.clear();
         panes.add(paneL);
         panes.add(paneR);
-        // 恢复上次活动的窗格（由 persistState 记录）
-        active = "R".equals(fmPrefs().getString(PREF_ACTIVE_PANE, "L")) ? paneR : paneL;
+        // 固定为左窗格：不恢复上次的活动窗格（与「重启回到存储根」策略一致）
+        active = paneL;
         // 根容器 = FrameLayout：body（模块主体）+ 侧边栏叠加层（内部展开，不遮全局导航栏）
         rootContainer = new FrameLayout(ctx);
         rootContainer.setLayoutParams(new ViewGroup.LayoutParams(
