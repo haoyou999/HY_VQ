@@ -1,9 +1,9 @@
 {
-  "versionCode": 30,
-  "versionName": "2.6.0",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.6.0/HY_VQ-v2.6.0.apk",
-  "size": 23561628,
-  "md5": "2c6b258aaf1286eca6e1af8f6fb4cd4b",
+  "versionCode": 31,
+  "versionName": "2.6.1",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.6.1/HY_VQ-v2.6.1.apk",
+  "size": 23561632,
+  "md5": "074b9717cf5009e1e541f0982b2d4cdc",
   "force": false,
-  "changelog": "· 【修复】FTP 服务器提示的 IP 在多网卡设备上可能给出**虚拟网卡地址**（如 ColorOS 的 vgate0=172.30.220.67），导致电脑连不上\n· 现按 WiFi → 热点 → 移动数据 → 其它 的优先级选取可达地址，并排除 vgate0/dummy/ovnet/tun/ifb/gre/rmnet_ipa 等虚拟接口\n· FTP 启动提示会列出全部候选地址（首选 WiFi 地址），便于在多网卡环境下选择\n· 新增「鸣潮表情包」功能（数据来源：呜哇小站 emoji.wuwa.games，特此致谢）\n· 支持按角色名筛选（如爱弥斯）或全库随机；GIF 动图直接播放（minSdk 28 原生 AnimatedImageDrawable）\n· 可一键保存到相册 Pictures/HY_VQ表情/，也可跳转查看原图页\n· **主动做每日调用限流**：每日上限 60 次（远低于站方额度），界面显示今日剩余次数，跨天自动重置\n· 限流目的：减轻对方免费服务器的压力；仅成功调用才计数，失败不扣次数"
+  "changelog": "· 【修复】表情包获取报 HTTP 401：应用携带了官方令牌（Authorization: Bearer），而该令牌被服务端判为「API Key 无效、已停用或已过期」\n· 经逐项实测确认：该接口本身开放，不带任何鉴权头即可正常返回；携带令牌反而是唯一的故障源\n· 现**彻底移除令牌与相关容错逻辑**，请求只保留 Accept 头，功能不再受令牌状态影响\n· 说明：当初「多种传法都返回 200」的测试具有误导性 —— 服务端只识别 Authorization 头，其余头被静默忽略，实际每次测的都是同一个无鉴权路径"
 }
