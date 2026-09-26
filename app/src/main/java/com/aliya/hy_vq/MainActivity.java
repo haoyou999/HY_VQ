@@ -2791,6 +2791,25 @@ public class MainActivity extends AppCompatActivity {
         return new String(out.toByteArray(), "UTF-8");
     }
 
+    /** 玻璃弹窗内的文字按钮（与 ModuleUiKit.glassDialog 观感统一：主色文字 + 圆角浅底） */
+    private TextView dialogTextButton(String text, View.OnClickListener onClick) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        tv.setTextColor(resolveAttr(com.google.android.material.R.attr.colorPrimary));
+        tv.setPadding(dp2(16), dp2(8), dp2(16), dp2(8));
+        tv.setClickable(true);
+        tv.setBackground(ModuleUiKit.rounded(this, dp2(10),
+                resolveAttr(com.google.android.material.R.attr.colorSurfaceContainerHighest), 0));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMarginStart(dp2(8));
+        tv.setLayoutParams(lp);
+        tv.setOnClickListener(onClick);
+        return tv;
+    }
+
     private int dp2(int v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
     }
@@ -2846,21 +2865,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDefaultPageDialog() {
         String current = prefs.getString("default_page", "home");
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 24, 24, 24);
-        root.setBackgroundResource(R.drawable.bg_dialog_add_friend);
-        root.setElevation(8f);
-
-        TextView title = new TextView(this);
-        title.setText("默认启动页");
-        title.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
-        title.setTextColor(resolveAttr(com.google.android.material.R.attr.colorOnSurface));
-        title.setPadding(0, 0, 0, 20);
-        root.addView(title);
+        // ⭐ v2.9.3 弹窗统一：此前这里是**手搓 Dialog**（bg_dialog_add_friend 背景 + 系统 Button
+        // + 自设窗口宽度/模糊），与全项目 glassDialog 的玻璃面板观感不一致，且没有点外关闭。
+        // 现改为与其它弹窗完全同源：玻璃面板 + 1dp 描边 + 背景模糊 + 点阴影处关闭。
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "默认启动页"));
 
         String[] items = {"首页", "聊天"};
         String[] values = {"home", "chat"};
@@ -2936,16 +2946,20 @@ public class MainActivity extends AppCompatActivity {
             card.setLayoutParams(cp);
             cardsRow.addView(card);
         }
-        root.addView(cardsRow);
+        box.addView(cardsRow);
 
-        // 确定按钮
-        Button btnOk = new Button(this);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+        // 按钮行：改用与其它玻璃弹窗同款的文字按钮（不再用系统 Button）
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        LinearLayout.LayoutParams btnsLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bp.topMargin = 20;
-        btnOk.setLayoutParams(bp);
-        btnOk.setText("确定");
-        btnOk.setOnClickListener(v2 -> {
+        btnsLp.topMargin = dp2(16);
+        box.addView(btns, btnsLp);
+
+        final Dialog dialog = ModuleUiKit.glassDialog(this, box, true);
+        btns.addView(dialogTextButton("取消", v2 -> dialog.dismiss()));
+        btns.addView(dialogTextButton("确定", v2 -> {
             prefs.edit().putString("default_page", values[picked[0]]).apply();
             Toast.makeText(this, "已设置默认启动页为：" + items[picked[0]], Toast.LENGTH_SHORT).show();
             // 同步设置页显示的默认页文案
@@ -2954,19 +2968,8 @@ public class MainActivity extends AppCompatActivity {
                 if (tvDefault != null) tvDefault.setText(items[picked[0]]);
             }
             dialog.dismiss();
-        });
-        root.addView(btnOk);
+        }));
 
-        dialog.setContentView(root);
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-            // 对话框宽度 = 2张卡片 + 间距 + padding = 30%*2 + 1个间距 ≈ 65%屏幕宽
-            dialog.getWindow().setLayout((int) (screenW() * 0.78f), ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().setGravity(Gravity.CENTER);
-            // 规范：所有浮窗统一走 ModuleUiKit.applyBlur（FLAG_BLUR_BEHIND + 半径）；
-            // 只调 setBackgroundBlurRadius 不加 FLAG_BLUR_BEHIND 不会生效
-            ModuleUiKit.applyBlur(dialog.getWindow(), this);
-        }
         dialog.setOnDismissListener(d -> activeDialogs.remove(dialog));
         activeDialogs.add(dialog);
         dialog.show();
