@@ -1141,6 +1141,21 @@ public class MainActivity extends AppCompatActivity {
                 }, 160);
             });
         }
+        // 实用软件分享（v2.9.0：只读浏览 123 云盘分享目录）
+        View shareBtn = binding.navView.findViewById(R.id.nav_share);
+        if (shareBtn != null) {
+            shareBtn.setOnClickListener(v -> {
+                binding.drawerLayout.closeDrawers();
+                binding.drawerLayout.postDelayed(() -> {
+                    try {
+                        startActivity(new Intent(MainActivity.this, ShareAppsActivity.class));
+                    } catch (Throwable t) {
+                        Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }, 160);
+            });
+        }
         // 文件管理（内置一级功能，非模块）
         View fmBtn = binding.navView.findViewById(R.id.nav_filemgr);
         if (fmBtn != null) {
@@ -1439,8 +1454,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupHomeView() {
-        homeView.findViewById(R.id.card_explore).setOnClickListener(v ->
-                Toast.makeText(this, "探索功能开发中", Toast.LENGTH_SHORT).show());
+        // 「软件分享」卡片（v2.9.0）：只读浏览作者云盘的实用软件目录
+        homeView.findViewById(R.id.card_explore).setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(MainActivity.this, ShareAppsActivity.class));
+            } catch (Throwable t) {
+                Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
         homeView.findViewById(R.id.card_moments).setOnClickListener(v ->
                 Toast.makeText(this, "朋友圈功能即将上线", Toast.LENGTH_SHORT).show());
         homeView.findViewById(R.id.card_mine).setOnClickListener(v -> openFileManager());

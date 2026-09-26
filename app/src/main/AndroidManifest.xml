@@ -59,6 +59,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:label="鸣潮表情包" />
 
+        <!-- 实用软件分享（v2.9.0）：只读浏览 123 云盘分享目录，下载后拉起安装器 -->
+        <activity
+            android:name=".ShareAppsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:label="实用软件分享" />
+
         <!-- 内置图片查看器：图片类文件优先由本页打开 -->
         <activity
             android:name=".ImageViewerActivity"
