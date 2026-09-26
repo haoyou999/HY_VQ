@@ -375,7 +375,50 @@ public class MainActivity extends AppCompatActivity {
         setSubpageToolbar("关于");
     }
 
+    /**
+     * 支持开发弹窗（v2.9.4）。
+     *
+     * <p>用户要求：关于页**不直接展示收款码**，只放一个按钮，点开才弹窗显示；
+     * 且更新日志不写、软件内不主动提醒（主打免费简洁）。</p>
+     */
+    private void showDonateDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(ModuleUiKit.sectionHeader(this, "支持开发"));
+
+        TextView tip = new TextView(this);
+        tip.setText("本软件完全免费、无广告。\n如果它帮到了你，可自愿扫码支持——不影响任何功能。");
+        tip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        tip.setLineSpacing(0, 1.35f);
+        tip.setTextColor(resolveAttr(com.google.android.material.R.attr.colorOnSurfaceVariant));
+        tip.setPadding(dp2(4), dp2(2), dp2(4), 0);
+        box.addView(tip);
+
+        ImageView qr = new ImageView(this);
+        qr.setImageResource(R.drawable.wechat_donate);
+        qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(dp2(230), dp2(230));
+        qp.gravity = Gravity.CENTER_HORIZONTAL;
+        qp.topMargin = dp2(14);
+        box.addView(qr, qp);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.END);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp2(14);
+        box.addView(btns, blp);
+
+        final Dialog dialog = ModuleUiKit.glassDialog(this, box, true);
+        btns.addView(dialogTextButton("关闭", v -> dialog.dismiss()));
+        dialog.show();
+    }
+
     private void setupAboutView() {
+        // 「支持开发」按钮入口（v2.9.4：不再在关于页直接铺收款码）
+        View btnDev = aboutView.findViewById(R.id.btn_support_dev);
+        if (btnDev != null) btnDev.setOnClickListener(v -> showDonateDialog());
         if (aboutView == null) return;
         int code = 0;
         try {
@@ -1325,19 +1368,10 @@ public class MainActivity extends AppCompatActivity {
 
     // ==================== Edit Profile Dialog ====================
     private void showEditProfileDialog() {
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        // ⭐ v2.9.4 弹窗统一：与全项目同源的 glassDialog（玻璃面板 + 描边 + 模糊 + 点阴影处关闭）。
+        // 此前是手搓 Dialog：自设窗口宽高与模糊，且**没有**点外关闭。
         View v = LayoutInflater.from(this).inflate(R.layout.dialog_edit_profile, null);
-        dialog.setContentView(v);
-        if (dialog.getWindow() != null) {
-            Window w = dialog.getWindow();
-            w.setBackgroundDrawableResource(android.R.color.transparent);
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.CENTER);
-            // 规范：所有浮窗统一走 ModuleUiKit.applyBlur（FLAG_BLUR_BEHIND + 半径）；
-            // 只调 setBackgroundBlurRadius 不加 FLAG_BLUR_BEHIND 不会生效
-            ModuleUiKit.applyBlur(w, this);
-        }
+        final Dialog dialog = ModuleUiKit.glassDialog(this, v, true);
 
         ImageView dialogAvatar = v.findViewById(R.id.dialog_avatar);
         EditText dialogName = v.findViewById(R.id.dialog_name);
@@ -1395,18 +1429,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void showSignatureDialog() {
         if (signatureManager == null) return;
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        View v = LayoutInflater.from(this).inflate(R.layout.dialog_signature, null);
-        dialog.setContentView(v);
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().setGravity(Gravity.CENTER);
-            // 规范：所有浮窗统一走 ModuleUiKit.applyBlur（FLAG_BLUR_BEHIND + 半径）；
-            // 只调 setBackgroundBlurRadius 不加 FLAG_BLUR_BEHIND 不会生效
-            ModuleUiKit.applyBlur(dialog.getWindow(), this);
-        }
+        // ⭐ v2.9.4 弹窗统一：同 ③（旧背景图 bg_dialog_add_friend + 自设窗口 + 无点外关闭）
+        final View v = LayoutInflater.from(this).inflate(R.layout.dialog_signature, null);
+        final Dialog dialog = ModuleUiKit.glassDialog(this, v, true);
         TextView tvSig = v.findViewById(R.id.tv_signature);
         try {
             JSONObject sigObj = new JSONObject(signatureManager.getSignatureJson());
