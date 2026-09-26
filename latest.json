@@ -1,9 +1,9 @@
 {
-  "versionCode": 34,
-  "versionName": "2.8.0",
-  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.8.0/HY_VQ-v2.8.0.apk",
-  "size": 23632682,
-  "md5": "8a131715f639fb1cbfb10869b7c99f1e",
+  "versionCode": 35,
+  "versionName": "2.9.0",
+  "apk": "https://github.com/haoyou999/HY_VQ/releases/download/v2.9.0/HY_VQ-v2.9.0.apk",
+  "size": 23795563,
+  "md5": "996ea13e60d443eed2e67e222c4c7e69",
   "force": false,
-  "changelog": "## v2.8.0 文件管理 ROOT 权限与功能\n\n新增（需设备已 root；未 root 的设备完全不受影响）：\n- 顶栏 ROOT 图标 / 侧边栏 ROOT 分组 / 更多菜单 ROOT 入口\n- 系统路径真实浏览：/ 、/data、/data/data、/data/adb、/system、/vendor、/product 等\n- root 文件操作：删除 / 复制 / 剪切 / 粘贴 / 重命名 / 新建文件与文件夹\n- 权限与属主修改：chmod（预设 644/755/600/700/777 + 递归）、chown（uid:gid 或 用户名 + 递归）\n- 属性页新增数字权限、属主与组、硬链接数、SELinux 上下文\n- root 文本文件用内置编辑器打开，保存自动写回原路径并保留原属主/权限/SELinux\n- 系统分区挂载：挂载 / 为可读写、恢复只读、查看挂载状态（erofs 只读镜像会如实报错）\n\n实现要点：\n- su 调用采用一命令一进程（实测单次约 19ms），不做常驻 shell，避免僵死与粘包\n- 列目录用 find + stat，文件名含空格或特殊字符不歧义（494 项约 36ms）\n- 内部存储等普通目录仍走 App 自身权限，浏览速度不受影响\n- 首次启动静默探测不弹授权窗；授权过的设备自动无感恢复\n\n注意：root 下删除为直接物理删除（不进回收站），界面会明确提示。"
+  "changelog": "## v2.9.0 实用软件分享\n\n新增：\n- 侧边栏与首页新增「实用软件分享」入口（首页「发现」卡片改为软件分享）\n- 分类浏览精选软件：系统工具 / 影音播放 / 图片处理 / 办公学习 / 网络浏览 / 效率增强 / 安全隐私 / 开发工具 / 游戏娱乐 / 其他软件\n- 点击即从云盘下载并拉起系统安装器，带下载进度显示\n- 数据源为只读分享目录，App 不做任何上传与写操作\n\n说明：各分类内容由作者陆续整理上传，欢迎反馈需要的软件。"
 }
