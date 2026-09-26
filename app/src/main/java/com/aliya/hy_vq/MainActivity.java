@@ -117,7 +117,12 @@ public class MainActivity extends AppCompatActivity {
     /** 本机缓存中可安装的更新包（比当前版本新） */
     private File updCachedApk;
     /** 已弹过更新提示的版本号：同一版本不在本次会话内重复打扰 */
-    private String autoPromptedVer = "";
+    /** 已自动提示过的版本（⭐ static：同一进程内同版本只提示一次，Activity 重建不重置） */
+    private static String autoPromptedVer = "";
+    /** ⭐ 每次「进入软件」（进程创建）只自动检测一次更新 —— static 守卫，Activity 重建不重复 */
+    private static boolean launchUpdateChecked = false;
+    /** ⭐ 更新流程进行中（下载/校验/安装）：期间一律不再自动弹「发现新版本」 */
+    private static volatile boolean updateFlowBusy = false;
     /** 历史版本列表是否展开（默认收起，避免列表过长） */
     private boolean historyExpanded = false;
     /** 国内源只读凭据内存缓存（避免每次请求都走 Keystore 解密） */
@@ -2212,6 +2217,11 @@ public class MainActivity extends AppCompatActivity {
      * 既"立即"又能让首帧先完成布局，避免白屏期间抢主线程。</p>
      */
     private void autoCheckUpdateOnLaunch() {
+        // ⭐ 只在「进入软件」时检测一次（进程级守卫）。此前无守卫 → 每次 onCreate 都检测，
+        // 而 Activity 会因旋转 / 被系统回收 / 从安装器返回而重建 → 下载途中突然又弹一次
+        // 「发现新版本」，用户会误以为在重复下载。静态标志随进程存在，重建不再触发。
+        if (launchUpdateChecked) return;
+        launchUpdateChecked = true;
         if (prefs == null || !prefs.getBoolean(PREF_AUTO_CHECK_UPDATE, true)) return;
         android.util.Log.i("HyVqUpdate", "启动检查：立即发起（无需等待）");
         handler.post(this::silentCheckUpdate);
@@ -2225,6 +2235,7 @@ public class MainActivity extends AppCompatActivity {
             if (list.isEmpty()) return;
             runOnUiThread(() -> {
                 if (updState == 1) return;   // 用户手动扫描中，不覆盖
+                if (updateFlowBusy) return;  // ⭐ 正在下载/校验/安装：绝不在此期间弹更新提示
                 updReleases = list;
                 updState = 2;
                 if (updateView != null) renderUpdateView();
@@ -2619,6 +2630,7 @@ public class MainActivity extends AppCompatActivity {
                                       final android.app.Dialog dialog) {
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
         cleanUpdateCache(null);   // 下载前清掉旧版本残留
+        updateFlowBusy = true;    // ⭐ 进入更新流程：期间任何自动检测都不弹窗
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -2641,9 +2653,11 @@ public class MainActivity extends AppCompatActivity {
         plp.topMargin = dp2(6);
         box.addView(pb, plp);
 
-        // 下载进度弹窗：不允许点击外部关闭（否则下载中途被误关）
+        // 下载进度弹窗：下载中不允许点击外部关闭（否则下载中途被误关）；
+        // 弹窗关闭即代表更新流程结束 → 清掉「进行中」标记（成功/失败/取消各路径都覆盖）
         final android.app.Dialog pd = ModuleUiKit.glassDialog(this, box, false);
         pd.setCancelable(false);
+        pd.setOnDismissListener(d -> updateFlowBusy = false);
         pd.show();
 
         new Thread(() -> {

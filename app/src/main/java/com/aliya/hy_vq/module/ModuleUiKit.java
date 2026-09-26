@@ -69,47 +69,52 @@ public final class ModuleUiKit {
         Dialog dialog = new Dialog(context);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        LinearLayout root = new LinearLayout(context);
-        root.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(context, 20);
-        root.setPadding(pad, pad, pad, pad);
-        // 玻璃质感：面板 88% 不透明度，让窗口背景模糊透出来
         int surface = color(context, com.google.android.material.R.attr.colorSurfaceContainerHigh);
-        // 边框描边（用户反馈：弹窗与背景同色无法分辨边界 → 统一加 1dp outline 描边）
         int stroke = color(context, com.google.android.material.R.attr.colorOutlineVariant);
+
+        // ── 玻璃质感面板（88% 不透明度，让窗口背景模糊透出来）──
+        LinearLayout panel = new LinearLayout(context);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(pad, pad, pad, pad);
         GradientDrawable gd = rounded(context, 24, (surface & 0x00FFFFFF) | 0xE0000000, stroke);
         gd.setStroke(dp(context, 1), stroke);
-        root.setBackground(gd);
+        panel.setBackground(gd);
+        panel.setClickable(true);   // 点面板内部不应关闭
         if (content != null) {
-            root.addView(content, new LinearLayout.LayoutParams(
+            panel.addView(content, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
-        dialog.setContentView(root);
+        // ⭐ 「点击面板外的阴影区域关闭」改用**真实遮罩层**实现（2026-09-26 重做）。
+        // 旧做法只在 decor 上 setClickable+setOnClickListener 兜底：而 applyBlur 为了让模糊
+        // 背景铺满会把窗口设成 MATCH_PARENT，此时「弹窗外的区域」仍在窗口内、且面板之外
+        // **没有任何真实子 View**，触摸能否冒泡到 decor 完全依赖系统分发细节 —— 实测不可靠。
+        // 现在在面板**下方**铺一层占满窗口的透明遮罩：面板外任意位置点击必然命中它 →
+        // 物理上不可能失效；面板在上层且自身 clickable，点面板内部不会误关。
+        int panelW = (int) (context.getResources().getDisplayMetrics().widthPixels * 0.92);
+        FrameLayout shell = new FrameLayout(context);
+        if (dismissOnOutside) {
+            View scrim = new View(context);
+            scrim.setClickable(true);
+            scrim.setFocusable(true);
+            scrim.setOnClickListener(v -> dialog.dismiss());
+            shell.addView(scrim, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        shell.addView(panel, new FrameLayout.LayoutParams(panelW,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+
+        dialog.setContentView(shell);
         if (dialog.getWindow() != null) {
             Window window = dialog.getWindow();
-            window.setLayout(
-                    (int) (context.getResources().getDisplayMetrics().widthPixels * 0.92),
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
             window.setBackgroundDrawableResource(android.R.color.transparent);
-            // 浮窗背景模糊（规范：浮窗必须带背景模糊）
-            applyBlur(window, context);
-
-            // ⭐ 修复「点击弹窗外无法关闭」：
-            // applyBlur 为让模糊背景完整覆盖，会把窗口铺满全屏（MATCH_PARENT），
-            // 于是「弹窗以外的区域」实际上仍在 Dialog 窗口内 ——
-            // 系统只认窗口外的触摸，setCanceledOnTouchOutside 永远不会触发。
-            // 故此处在窗口根布局上显式补一次「点空白关闭」，并让内容面板拦截自身点击。
-            final View decor = window.getDecorView();
-            if (dismissOnOutside) {
-                decor.setClickable(true);
-                decor.setFocusable(true);
-                // Dialog 无公开的 isCancelable()，能否点外关闭由本参数在创建时决定
-                decor.setOnClickListener(v -> dialog.dismiss());
-            }
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setGravity(Gravity.CENTER);
+            // centerContent=false：面板已在 shell 中居中，这里只管铺模糊背景
+            applyBlur(window, context, false);
         }
-        // 内容面板拦截点击：点面板内部不应关闭（只有面板外的模糊区域才关闭）
-        root.setClickable(true);
         dialog.setCancelable(true);
         return dialog;
     }
@@ -127,6 +132,15 @@ public final class ModuleUiKit {
      * 注意：面板自身需半透明（如 {@link #glassDialog} 的 88% 不透明度），模糊效果才可见。
      */
     public static void applyBlur(Window window, Context context) {
+        applyBlur(window, context, true);
+    }
+
+    /**
+     * @param centerContent true = 把内容面板收窄并垂直居中（**既有自定义弹窗的旧行为，保持兼容**）；
+     *                      false = 只铺模糊背景，子 View 布局交给调用方
+     *                      （{@link #glassDialog} 用，因为面板已在 shell 里居中，若再收窄会连遮罩一起缩掉）
+     */
+    public static void applyBlur(Window window, Context context, boolean centerContent) {
         if (window == null) return;
         // 主方案：截图模糊背景（弹窗内容悬浮其上，全版本可靠）
         Drawable bg = captureBlurredBackground(context);
@@ -138,6 +152,7 @@ public final class ModuleUiKit {
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             window.setGravity(Gravity.CENTER);
             // 原弹窗内容改为垂直居中悬浮（宽度保持原窗口宽度）
+            if (!centerContent) return;
             View decor = window.getDecorView();
             View content = decor.findViewById(android.R.id.content);
             if (content instanceof FrameLayout && ((FrameLayout) content).getChildCount() > 0) {
