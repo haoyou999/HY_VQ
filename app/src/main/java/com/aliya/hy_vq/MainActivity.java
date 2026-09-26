@@ -128,6 +128,10 @@ public class MainActivity extends AppCompatActivity {
     private static final int PAGE_ACCOUNT = 4;
     private static final int PAGE_MODULE_SETTINGS = 6;
     private static final int PAGE_PERMISSIONS = 7;
+    /** 实用软件分享（v2.9.1 内嵌页） */
+    private static final int PAGE_SHARE = 9;
+    /** 鸣潮表情包（v2.9.1 内嵌页） */
+    private static final int PAGE_EMOJI = 10;
     private static final int PAGE_MODULE_BASE = 100;
 
     private ActivityMainBinding binding;
@@ -527,6 +531,46 @@ public class MainActivity extends AppCompatActivity {
         resetToolbar();
         binding.toolbarTitle.setText("文件管理");
         updateDrawerSelection();
+    }
+
+    // ── v2.9.1 内嵌式页面（与文件管理同款：进 contentFrame，不跳独立 Activity）──
+
+    private ShareAppsView shareAppsView;
+    private WuwaEmojiView wuwaEmojiView;
+
+    /** 实用软件分享：内嵌视图（复用文件管理那套 switchContent 机制） */
+    private void openShareApps() {
+        if (shareAppsView == null) {
+            shareAppsView = new ShareAppsView(this, LayoutInflater.from(this), contentFrame);
+        }
+        switchContent(shareAppsView.getRoot(), PAGE_SHARE);
+        resetToolbar();
+        binding.toolbarTitle.setText("实用软件分享");
+        updateDrawerSelection();
+    }
+
+    /** 鸣潮表情包：内嵌视图（原独立 Activity 已改为内嵌） */
+    private void openEmoji() {
+        if (wuwaEmojiView == null) {
+            wuwaEmojiView = new WuwaEmojiView(this, LayoutInflater.from(this), contentFrame);
+        }
+        switchContent(wuwaEmojiView.getRoot(), PAGE_EMOJI);
+        resetToolbar();
+        binding.toolbarTitle.setText("鸣潮表情包");
+        updateDrawerSelection();
+    }
+
+    /** 返回键：内嵌页内部分层（分享页分类内 → 分类列表），再按则回首页 */
+    @Override
+    public void onBackPressed() {
+        if (currentPageIndex == PAGE_SHARE && shareAppsView != null && shareAppsView.onBack()) {
+            return;
+        }
+        if (currentPageIndex == PAGE_SHARE || currentPageIndex == PAGE_EMOJI) {
+            switchToHome();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void switchToModuleSettings() {
@@ -1131,14 +1175,7 @@ public class MainActivity extends AppCompatActivity {
         if (emojiBtn != null) {
             emojiBtn.setOnClickListener(v -> {
                 binding.drawerLayout.closeDrawers();
-                binding.drawerLayout.postDelayed(() -> {
-                    try {
-                        startActivity(new Intent(MainActivity.this, WuwaEmojiActivity.class));
-                    } catch (Throwable t) {
-                        Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
-                                Toast.LENGTH_SHORT).show();
-                    }
-                }, 160);
+                binding.drawerLayout.postDelayed(this::openEmoji, 160);
             });
         }
         // 实用软件分享（v2.9.0：只读浏览 123 云盘分享目录）
@@ -1146,14 +1183,7 @@ public class MainActivity extends AppCompatActivity {
         if (shareBtn != null) {
             shareBtn.setOnClickListener(v -> {
                 binding.drawerLayout.closeDrawers();
-                binding.drawerLayout.postDelayed(() -> {
-                    try {
-                        startActivity(new Intent(MainActivity.this, ShareAppsActivity.class));
-                    } catch (Throwable t) {
-                        Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
-                                Toast.LENGTH_SHORT).show();
-                    }
-                }, 160);
+                binding.drawerLayout.postDelayed(this::openShareApps, 160);
             });
         }
         // 文件管理（内置一级功能，非模块）
@@ -1454,15 +1484,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupHomeView() {
-        // 「软件分享」卡片（v2.9.0）：只读浏览作者云盘的实用软件目录
-        homeView.findViewById(R.id.card_explore).setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(MainActivity.this, ShareAppsActivity.class));
-            } catch (Throwable t) {
-                Toast.makeText(MainActivity.this, "无法打开：" + t.getMessage(),
-                        Toast.LENGTH_SHORT).show();
-            }
-        });
+        // 「软件分享」卡片（v2.9.1）：内嵌打开，不再跳独立页面
+        homeView.findViewById(R.id.card_explore).setOnClickListener(v -> openShareApps());
         homeView.findViewById(R.id.card_moments).setOnClickListener(v ->
                 Toast.makeText(this, "朋友圈功能即将上线", Toast.LENGTH_SHORT).show());
         homeView.findViewById(R.id.card_mine).setOnClickListener(v -> openFileManager());

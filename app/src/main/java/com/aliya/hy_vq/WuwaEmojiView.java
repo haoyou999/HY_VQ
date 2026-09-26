@@ -2,17 +2,19 @@ package com.aliya.hy_vq;
 
 import android.app.Activity;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.ImageDecoder;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
@@ -35,30 +37,31 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * 鸣潮表情包获取页。
+ * 鸣潮表情包（v2.9.1 内嵌化）。
+ *
+ * <p>与文件管理模块同款「内嵌视图」：由 {@code MainActivity} inflate 后经
+ * {@code switchContent()} 放进 {@code contentFrame}，<b>不再 startActivity 跳独立页面</b>。</p>
  *
  * <p>数据来源：呜哇小站 · 表情包仓鼠库（https://emoji.wuwa.games/api），
  * 感谢其为社区提供的免费 API 服务。</p>
  *
- * <p><b>每日调用限流（重要）</b>：站方对原图下载有频率限制（登录后约 60 分钟 50 次）。
- * 本应用主动把调用限制在每日 DAILY_LIMIT 次，远低于官方额度，
- * 目的是减轻对方服务器压力 —— 免费服务需要被善待。</p>
- *
- * <p>动图支持：minSdk 28 起可用 ImageDecoder 解码为 AnimatedImageDrawable，
- * GIF 直接播放，无需第三方库。</p>
+ * <p><b>每日调用限流</b>：站方对原图下载有频率限制（登录后约 60 分钟 50 次）。
+ * 本应用主动限制在每日 DAILY_LIMIT 次，远低于官方额度 —— 免费服务需要被善待。</p>
  */
-public class WuwaEmojiActivity extends Activity {
+public class WuwaEmojiView {
 
     private static final String API_RANDOM =
             "https://emoji.wuwa.games/apis/api.random-emoji.wuwa.games/v1alpha1/random";
 
     private static final int TIMEOUT_MS = 15000;
 
-    // 每日限流：远低于官方额度，主动减轻对方服务器压力
     private static final int DAILY_LIMIT = 60;
     private static final String PREF_NAME = "app_settings";
     private static final String PREF_DAY = "wuwa_day";
     private static final String PREF_COUNT = "wuwa_count";
+
+    private final Activity host;
+    private final View root;
 
     private ImageView ivEmoji;
     private ProgressBar pbEmoji;
@@ -71,30 +74,32 @@ public class WuwaEmojiActivity extends Activity {
     private String curUrl, curSourceUrl, curName, curSlug, curFormat;
     private byte[] curBytes;
 
-    @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_wuwa_emoji);
+    public WuwaEmojiView(Activity host, LayoutInflater inflater, ViewGroup parent) {
+        this.host = host;
+        this.root = inflater.inflate(R.layout.activity_wuwa_emoji, parent, false);
 
-        ivEmoji = findViewById(R.id.iv_emoji);
-        pbEmoji = findViewById(R.id.pb_emoji);
-        tvHint = findViewById(R.id.tv_emoji_hint);
-        tvInfo = findViewById(R.id.tv_emoji_info);
-        tvQuota = findViewById(R.id.tv_emoji_quota);
-        etCharacter = findViewById(R.id.et_emoji_character);
-        btnFetch = findViewById(R.id.btn_emoji_fetch);
-        btnSave = findViewById(R.id.btn_emoji_save);
-        btnOpenSource = findViewById(R.id.btn_emoji_open_source);
+        ivEmoji = root.findViewById(R.id.iv_emoji);
+        pbEmoji = root.findViewById(R.id.pb_emoji);
+        tvHint = root.findViewById(R.id.tv_emoji_hint);
+        tvInfo = root.findViewById(R.id.tv_emoji_info);
+        tvQuota = root.findViewById(R.id.tv_emoji_quota);
+        etCharacter = root.findViewById(R.id.et_emoji_character);
+        btnFetch = root.findViewById(R.id.btn_emoji_fetch);
+        btnSave = root.findViewById(R.id.btn_emoji_save);
+        btnOpenSource = root.findViewById(R.id.btn_emoji_open_source);
 
-        findViewById(R.id.btn_emoji_back).setOnClickListener(v -> finish());
+        // 内嵌后由宿主工具栏负责返回，隐藏页面自带的返回按钮
+        View back = root.findViewById(R.id.btn_emoji_back);
+        if (back != null) back.setVisibility(View.GONE);
+
         btnFetch.setOnClickListener(v -> fetchRandom());
         btnSave.setOnClickListener(v -> saveCurrent());
         btnOpenSource.setOnClickListener(v -> {
             if (curSourceUrl != null && !curSourceUrl.isEmpty()) {
                 try {
-                    startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
-                            Uri.parse(curSourceUrl)));
+                    host.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(curSourceUrl)));
                 } catch (Throwable t) {
-                    ModuleUiKit.toast(this, "无法打开链接");
+                    ModuleUiKit.toast(host, "无法打开链接");
                 }
             }
         });
@@ -103,22 +108,29 @@ public class WuwaEmojiActivity extends Activity {
         fetchRandom();
     }
 
+    public View getRoot() {
+        return root;
+    }
+
     // ---------------- 每日限流 ----------------
 
     private String today() {
         return new SimpleDateFormat("yyyyMMdd", Locale.CHINA).format(new Date());
     }
 
+    private SharedPreferences prefs() {
+        return host.getSharedPreferences(PREF_NAME, Activity.MODE_PRIVATE);
+    }
+
     private int usedToday() {
-        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+        SharedPreferences sp = prefs();
         if (!today().equals(sp.getString(PREF_DAY, ""))) return 0;   // 跨天自动归零
         return sp.getInt(PREF_COUNT, 0);
     }
 
     private void markUsed() {
-        SharedPreferences sp = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
         int n = usedToday() + 1;
-        sp.edit().putString(PREF_DAY, today()).putInt(PREF_COUNT, n).apply();
+        prefs().edit().putString(PREF_DAY, today()).putInt(PREF_COUNT, n).apply();
     }
 
     private int remaining() {
@@ -135,7 +147,7 @@ public class WuwaEmojiActivity extends Activity {
 
     private void fetchRandom() {
         if (remaining() <= 0) {
-            ModuleUiKit.toast(this, "今日调用已达上限（" + DAILY_LIMIT + " 次），明日自动恢复");
+            ModuleUiKit.toast(host, "今日调用已达上限（" + DAILY_LIMIT + " 次），明日自动恢复");
             return;
         }
         final String ch = etCharacter.getText() == null ? ""
@@ -153,7 +165,7 @@ public class WuwaEmojiActivity extends Activity {
                     sb.append("?character=").append(URLEncoder.encode(ch, "UTF-8"));
                 }
                 // 直接免鉴权调用：实测接口本身开放；官方令牌在当前环境下会被判为
-                //「API Key 无效、已停用或已过期」而返回 401，故不再携带任何鉴权头。
+                //「API Key 无效、已停用或已过期」而返回 401，故不携带任何鉴权头。
                 HttpURLConnection c = (HttpURLConnection) new URL(sb.toString()).openConnection();
                 c.setConnectTimeout(TIMEOUT_MS);
                 c.setReadTimeout(TIMEOUT_MS);
@@ -188,7 +200,7 @@ public class WuwaEmojiActivity extends Activity {
                 if (ferr != null) {
                     tvHint.setVisibility(View.VISIBLE);
                     tvHint.setText("获取失败：" + ferr + "\n请检查网络后重试");
-                    ModuleUiKit.toast(this, "获取失败：" + ferr);
+                    ModuleUiKit.toast(host, "获取失败：" + ferr);
                     refreshQuota();
                     return;
                 }
@@ -196,7 +208,7 @@ public class WuwaEmojiActivity extends Activity {
                 showEmoji(fmeta, fbytes);
                 refreshQuota();
             });
-        }).start();
+        }, "HyVqEmojiFetch").start();
     }
 
     private void showEmoji(JSONObject meta, byte[] bytes) {
@@ -265,10 +277,10 @@ public class WuwaEmojiActivity extends Activity {
                     cv.put(MediaStore.Images.Media.MIME_TYPE, "image/" + ext);
                     cv.put(MediaStore.Images.Media.RELATIVE_PATH,
                             Environment.DIRECTORY_PICTURES + "/HY_VQ表情");
-                    Uri uri = getContentResolver().insert(
+                    Uri uri = host.getContentResolver().insert(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
                     if (uri == null) throw new Exception("无法创建媒体条目");
-                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    try (OutputStream os = host.getContentResolver().openOutputStream(uri)) {
                         if (os == null) throw new Exception("无法写入");
                         os.write(curBytes);
                     }
@@ -288,10 +300,10 @@ public class WuwaEmojiActivity extends Activity {
             }
             final String ferr = err, fpath = savedPath;
             handler.post(() -> {
-                if (ferr != null) ModuleUiKit.toast(this, "保存失败：" + ferr);
-                else ModuleUiKit.toast(this, "已保存到 " + fpath);
+                if (ferr != null) ModuleUiKit.toast(host, "保存失败：" + ferr);
+                else ModuleUiKit.toast(host, "已保存到 " + fpath);
             });
-        }).start();
+        }, "HyVqEmojiSave").start();
     }
 
     private void setLoading(boolean loading) {

@@ -51,21 +51,9 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <!-- 鸣潮表情包（数据来源：呜哇小站 emoji.wuwa.games，已做每日限流） -->
-        <activity
-            android:name=".WuwaEmojiActivity"
-            android:exported="false"
-            android:theme="@style/AppTheme"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
-            android:label="鸣潮表情包" />
-
-        <!-- 实用软件分享（v2.9.0）：只读浏览 123 云盘分享目录，下载后拉起安装器 -->
-        <activity
-            android:name=".ShareAppsActivity"
-            android:exported="false"
-            android:theme="@style/AppTheme"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
-            android:label="实用软件分享" />
+        <!-- 鸣潮表情包 / 实用软件分享：v2.9.1 起改为**内嵌视图**
+             （WuwaEmojiView / ShareAppsView，进 MainActivity.contentFrame），
+             不再声明独立的 Activity，故此处无对应条目 -->
 
         <!-- 内置图片查看器：图片类文件优先由本页打开 -->
         <activity
